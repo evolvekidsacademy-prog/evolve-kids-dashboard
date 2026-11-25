@@ -344,6 +344,19 @@ const INITIAL_CALL_LOGS = [
   {
     id: 'call-5',
     userId: null,
+    participantName: 'Priya Subramanian',
+    participantRole: 'staff',
+    batchId: 'b-2',
+    batchName: 'Junior Sparks (Level 1–2)',
+    roomCode: 'EvolveKids-Spark-202',
+    sessionDate: '19 Nov 2026',
+    startedAt: '06:00 PM',
+    endedAt: '06:49 PM',
+    durationSeconds: 2940
+  },
+  {
+    id: 'call-6',
+    userId: null,
     participantName: 'Aarav Sharma',
     participantRole: 'student',
     batchId: 'b-1',
@@ -943,7 +956,7 @@ export default function App() {
   // Auth & Role State ('admin' | 'staff' | 'student')
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [demoRole, setDemoRole] = useState(null); // null when signed in via Supabase, or 'admin' | 'staff' | 'student' in demo mode
+  const [demoRole, setDemoRole] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [profilesList, setProfilesList] = useState([]);
@@ -960,6 +973,7 @@ export default function App() {
   const [students, setStudents] = useState(INITIAL_STUDENTS);
   const [batches, setBatches] = useState(INITIAL_BATCHES);
   const [callLogs, setCallLogs] = useState(INITIAL_CALL_LOGS);
+  const [adminCallRoleFilter, setAdminCallRoleFilter] = useState('All');
 
   // Classroom & Jitsi State
   const [activeBatchId, setActiveBatchId] = useState('b-1');
@@ -1370,25 +1384,56 @@ export default function App() {
     });
   }, [roleStudents, studentSearch, levelFilter, trainerFilter, feeFilter]);
 
-  // Video Call Logs filtered by Role (Admin sees ALL; Staff & Student see their own attended sessions)
+  // Video Call Logs filtered by Role:
+  // - Admin: sees ALL sessions across Admin, Staff, and Students (with optional role filter)
+  // - Staff: sees all sessions attended/conducted by this staff member
+  // - Student: sees all sessions attended by this student
   const visibleCallLogs = useMemo(() => {
-    if (currentRole === 'admin') return callLogs;
+    if (currentRole === 'admin') {
+      if (adminCallRoleFilter === 'All') return callLogs;
+      return callLogs.filter((log) => log.participantRole === adminCallRoleFilter.toLowerCase());
+    }
+
+    const cleanUser = currentUserName.replace(/\s*\(Demo.*\)$/i, '').trim().toLowerCase();
+    const emailPrefix = (session?.user?.email || '').split('@')[0].trim().toLowerCase();
+
     return callLogs.filter((log) => {
       if (session?.user?.id && log.userId) {
         return log.userId === session.user.id;
       }
-      const cleanUser = currentUserName.replace(/\s*\(Demo.*\)$/i, '').trim().toLowerCase();
-      return (
-        log.participantRole === currentRole &&
-        log.participantName.toLowerCase().includes(cleanUser.split(' ')[0] || '')
-      );
+      const logName = (log.participantName || '').trim().toLowerCase();
+      if (log.participantRole !== currentRole) return false;
+      if (cleanUser && logName === cleanUser) return true;
+      if (emailPrefix && logName === emailPrefix) return true;
+      const firstToken = cleanUser.split(' ')[0];
+      return Boolean(firstToken && logName.includes(firstToken));
     });
-  }, [callLogs, currentRole, session, currentUserName]);
+  }, [callLogs, currentRole, adminCallRoleFilter, session, currentUserName]);
 
   const totalCallSeconds = useMemo(
     () => visibleCallLogs.reduce((acc, log) => acc + (Number(log.durationSeconds) || 0), 0),
     [visibleCallLogs]
   );
+
+  // Admin Summary by Participant (shows total duration per staff & student)
+  const adminParticipantSummary = useMemo(() => {
+    if (currentRole !== 'admin') return [];
+    const map = new Map();
+    callLogs.forEach((log) => {
+      const key = `${log.participantRole}:${log.userId || log.participantName.toLowerCase()}`;
+      const existing = map.get(key) || {
+        key,
+        name: log.participantName,
+        role: log.participantRole,
+        sessionsCount: 0,
+        totalSeconds: 0
+      };
+      existing.sessionsCount += 1;
+      existing.totalSeconds += Number(log.durationSeconds) || 0;
+      map.set(key, existing);
+    });
+    return Array.from(map.values()).sort((a, b) => b.totalSeconds - a.totalSeconds);
+  }, [callLogs, currentRole]);
 
   // Start / Stop & Log Video Call Duration
   const startVideoCallSession = (batchIdToJoin) => {
@@ -2021,7 +2066,7 @@ export default function App() {
               <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    {currentRole === 'admin' ? 'Total Video Call Duration' : 'My Video Call Duration'}
+                    {currentRole === 'admin' ? 'All Video Call Duration' : 'My Video Call Duration'}
                   </span>
                   <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                     <Clock className="w-5 h-5" />
@@ -2037,7 +2082,9 @@ export default function App() {
                 </div>
                 <p className="text-xs text-slate-500 mt-2">
                   {currentRole === 'admin'
-                    ? 'Across all trainers & students'
+                    ? 'Combined staff & student call time'
+                    : currentRole === 'staff'
+                    ? 'Total live teaching call time'
                     : `Attendance rate: ${stats.avgAttendance}%`}
                 </p>
               </div>
@@ -2124,21 +2171,88 @@ export default function App() {
               </div>
             </div>
 
-            {/* Video Call Duration & Attended Sessions Log (Role-Scoped) */}
+            {/* Admin Per-Participant Total Duration Breakdown */}
+            {currentRole === 'admin' && adminParticipantSummary.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+                <div className="mb-4">
+                  <h3 className="text-base font-bold text-slate-900">
+                    Total Video Call Time by Staff & Student
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Cumulative live classroom duration per trainer and student
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {adminParticipantSummary.map((item) => (
+                    <div key={item.key} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs text-slate-900 truncate">{item.name}</div>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              item.role === 'admin'
+                                ? 'bg-indigo-100 text-indigo-800'
+                                : item.role === 'staff'
+                                ? 'bg-teal-100 text-teal-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {item.role}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            {item.sessionsCount} {item.sessionsCount === 1 ? 'session' : 'sessions'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="font-mono text-xs font-extrabold text-indigo-700 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shrink-0">
+                        {formatDuration(item.totalSeconds)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Video Call Duration & Attended Sessions Log (Admin: All | Staff & Student: Own Sessions) */}
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
                     {currentRole === 'admin'
                       ? 'All Video Call Sessions & Durations (Admin Audit)'
+                      : currentRole === 'staff'
+                      ? 'My Attended & Conducted Sessions with Time Duration'
                       : 'My Attended Video Sessions & Time Duration'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Automatically recorded whenever a participant joins and leaves a Jitsi live video room
+                    {currentRole === 'admin'
+                      ? 'Shows every live video call attended by all staff trainers and students'
+                      : 'Automatically recorded whenever you join and leave a Jitsi live video room'}
                   </p>
                 </div>
-                <div className="px-3.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-800">
-                  Total Time: {formatDuration(totalCallSeconds)}
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {currentRole === 'admin' && (
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                      {['All', 'Staff', 'Student', 'Admin'].map((roleOpt) => (
+                        <button
+                          key={roleOpt}
+                          type="button"
+                          onClick={() => setAdminCallRoleFilter(roleOpt)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            adminCallRoleFilter === roleOpt
+                              ? 'bg-white text-indigo-900 shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {roleOpt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="px-3.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-800">
+                    Total Time: {formatDuration(totalCallSeconds)}
+                  </div>
                 </div>
               </div>
 
@@ -2385,6 +2499,365 @@ export default function App() {
         )}
 
         {/* ===================================================================== */}
+        {/* TAB 3: STUDENTS & LEVELS                                              */}
+        {/* ===================================================================== */}
+        {activeTab === 'students' && currentRole !== 'student' && (
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder="Search student name or Abacus level..."
+                  className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <select
+                  value={levelFilter}
+                  onChange={(e) => setLevelFilter(e.target.value)}
+                  className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
+                >
+                  <option value="All">All Levels (1–8)</option>
+                  <option value="Level 1">Level 1</option>
+                  <option value="Level 2">Level 2</option>
+                  <option value="Level 3">Level 3</option>
+                  <option value="Level 4">Level 4</option>
+                  <option value="Level 5">Level 5</option>
+                  <option value="Level 6">Level 6</option>
+                  <option value="Level 8">Level 8</option>
+                </select>
+
+                <select
+                  value={trainerFilter}
+                  onChange={(e) => setTrainerFilter(e.target.value)}
+                  className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
+                >
+                  <option value="All">All Trainers</option>
+                  {staff.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={feeFilter}
+                  onChange={(e) => setFeeFilter(e.target.value)}
+                  className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
+                >
+                  <option value="All">All Fee Status</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Due Soon">Due Soon</option>
+                  <option value="Overdue">Overdue</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="py-3.5 px-4">Student & Age</th>
+                      <th className="py-3.5 px-4">Abacus Level</th>
+                      <th className="py-3.5 px-4">Assigned Trainer</th>
+                      <th className="py-3.5 px-4">8-Session Progress</th>
+                      <th className="py-3.5 px-4">Fee Status</th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {filteredStudents.map((stu) => {
+                      const pct = Math.round((stu.sessionsCompleted / stu.totalCycleSessions) * 100);
+                      return (
+                        <tr key={stu.id} className="hover:bg-slate-50/70 transition">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900">{stu.name}</div>
+                            <div className="text-xs text-slate-500">
+                              Age {stu.age} • {stu.parentPhone}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              <Award className="w-3.5 h-3.5" />
+                              {stu.level}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="font-semibold text-slate-800 text-xs">{getTrainerName(stu.trainerId)}</div>
+                            <div className="text-[11px] text-slate-400">
+                              {batches.find((b) => b.id === stu.batchId)?.days}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                              <span>
+                                {stu.sessionsCompleted}/{stu.totalCycleSessions} Sessions
+                              </span>
+                              <span className="text-slate-400">{stu.attendanceRate}% Att.</span>
+                            </div>
+                            <div className="w-32 h-2 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  stu.sessionsCompleted === 8 ? 'bg-amber-500' : 'bg-teal-500'
+                                }`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
+                                stu.feeStatus === 'Paid'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : stu.feeStatus === 'Due Soon'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-rose-50 text-rose-700 border border-rose-200'
+                              }`}
+                            >
+                              {stu.feeStatus} (₹{stu.monthlyFee})
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleJoinClassroom(stu.batchId)}
+                              className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition cursor-pointer"
+                            >
+                              Join Batch
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB 4: STAFF & ROLES                                                  */}
+        {/* ===================================================================== */}
+        {activeTab === 'staff' && currentRole !== 'student' && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Evolve Kids Certified Abacus Trainers</h3>
+                <p className="text-xs text-slate-500">
+                  Manage trainer batches, 50–50 revenue split, and Supabase user roles
+                </p>
+              </div>
+              {currentRole === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddStaffModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-sm transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add New Staff Trainer
+                </button>
+              )}
+            </div>
+
+            {/* Supabase Account Role Manager (Admin Only) */}
+            {currentRole === 'admin' && profilesList.length > 0 && (
+              <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                      Supabase Account Roles (`public.profiles`)
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Promote signed-up trainers to <strong>staff</strong> or keep learners as <strong>student</strong>
+                    </p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+                        <th className="py-2.5 px-3">Name</th>
+                        <th className="py-2.5 px-3">Email</th>
+                        <th className="py-2.5 px-3">Assigned Role</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {profilesList.map((prof) => (
+                        <tr key={prof.id}>
+                          <td className="py-2.5 px-3 font-bold text-slate-900">{prof.full_name || '—'}</td>
+                          <td className="py-2.5 px-3 text-slate-600">{prof.email}</td>
+                          <td className="py-2.5 px-3">
+                            <select
+                              value={prof.role}
+                              onChange={(e) => handleUpdateUserRole(prof.id, e.target.value)}
+                              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 font-bold text-slate-800 outline-none"
+                            >
+                              <option value="student">student</option>
+                              <option value="staff">staff</option>
+                              <option value="admin">admin</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {staff.map((member) => {
+                const assignedStudents = students.filter((s) => s.trainerId === member.id);
+                const monthlyRevenue = assignedStudents
+                  .filter((s) => s.feeStatus === 'Paid')
+                  .reduce((acc, s) => acc + s.monthlyFee, 0);
+                const trainerPayout = Math.round((monthlyRevenue * member.sharePercent) / 100);
+
+                return (
+                  <div
+                    key={member.id}
+                    className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 flex flex-col justify-between gap-4"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3.5">
+                          <div
+                            className={`w-12 h-12 rounded-2xl ${member.avatarColor} text-white font-extrabold flex items-center justify-center text-base shadow-sm`}
+                          >
+                            {member.name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .join('')
+                              .slice(0, 2)}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-base text-slate-900">{member.name}</h4>
+                            <p className="text-xs font-medium text-slate-500">{member.role}</p>
+                          </div>
+                        </div>
+
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {member.status}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5 mt-4">
+                        {member.specialties.map((spec) => (
+                          <span
+                            key={spec}
+                            className="text-[11px] font-semibold px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700"
+                          >
+                            {spec}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 text-center">
+                      <div className="bg-slate-50 rounded-xl p-2.5">
+                        <div className="text-xs text-slate-500">Students</div>
+                        <div className="text-base font-extrabold text-slate-900">{assignedStudents.length}</div>
+                      </div>
+                      <div className="bg-slate-50 rounded-xl p-2.5">
+                        <div className="text-xs text-slate-500">Sessions/Wk</div>
+                        <div className="text-base font-extrabold text-slate-900">{member.classesThisWeek}</div>
+                      </div>
+                      <div className="bg-indigo-50/70 rounded-xl p-2.5">
+                        <div className="text-xs text-indigo-600 font-medium">
+                          {currentRole === 'admin' ? `${member.sharePercent}% Payout` : 'Split'}
+                        </div>
+                        <div className="text-base font-extrabold text-indigo-900">
+                          {currentRole === 'admin' ? `₹${trainerPayout.toLocaleString('en-IN')}` : `${member.sharePercent}%`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB 5: CLASS TIMINGS & ONLINE BATCH SCHEDULE                          */}
+        {/* ===================================================================== */}
+        {activeTab === 'schedule' && currentRole !== 'student' && (
+          <div className="space-y-5">
+            <div className="bg-indigo-950 text-white rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-teal-300">
+                  Standard Evolve Kids Cadence
+                </span>
+                <h3 className="text-lg font-extrabold mt-0.5">
+                  2 Live Sessions / Week • 8 Sessions / Monthly Cycle • 50 Mins / Class
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleJoinClassroom('b-1')}
+                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold transition shrink-0 cursor-pointer"
+              >
+                Launch Current Live Batch
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {batches.map((batch) => {
+                const batchStudents = students.filter((s) => s.batchId === batch.id);
+                return (
+                  <div
+                    key={batch.id}
+                    className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 flex flex-col justify-between gap-4"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700">
+                          {batch.days}
+                        </span>
+                        <span className="text-xs font-mono font-semibold text-slate-400">
+                          {batch.roomCode}
+                        </span>
+                      </div>
+
+                      <h4 className="text-base font-bold text-slate-900">{batch.name}</h4>
+                      <p className="text-sm font-semibold text-teal-700 mt-1 flex items-center gap-1.5">
+                        <Clock className="w-4 h-4" />
+                        {batch.time}
+                      </p>
+
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                        <span>
+                          Trainer: <strong className="text-slate-900">{getTrainerName(batch.trainerId)}</strong>
+                        </span>
+                        <span>
+                          Enrolled: <strong className="text-slate-900">{batchStudents.length} Students</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleJoinClassroom(batch.id)}
+                      className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                    >
+                      <Video className="w-4 h-4" />
+                      Start Live Video & Digital Abacus
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
         {/* TAB 6: SESSION ATTENDANCE TRACKER & CALL DURATIONS                    */}
         {/* ===================================================================== */}
         {activeTab === 'attendance' && (
@@ -2477,22 +2950,45 @@ export default function App() {
               </div>
             )}
 
-            {/* Video Call Duration History */}
+            {/* Video Call Duration History (Admin: All | Staff & Student: Own Attended Sessions) */}
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
                     {currentRole === 'admin'
                       ? 'All Video Call Durations (Staff & Students)'
+                      : currentRole === 'staff'
+                      ? 'My Attended & Conducted Sessions with Time Duration'
                       : 'Sessions Attended & Video Call Time Duration'}
                   </h3>
                   <p className="text-xs text-slate-500">
                     Detailed start time, end time, and exact call duration per live session
                   </p>
                 </div>
-                <span className="px-3.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
-                  Cumulative Time: {formatDuration(totalCallSeconds)}
-                </span>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {currentRole === 'admin' && (
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                      {['All', 'Staff', 'Student', 'Admin'].map((roleOpt) => (
+                        <button
+                          key={roleOpt}
+                          type="button"
+                          onClick={() => setAdminCallRoleFilter(roleOpt)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            adminCallRoleFilter === roleOpt
+                              ? 'bg-white text-indigo-900 shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {roleOpt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <span className="px-3.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
+                    Cumulative Time: {formatDuration(totalCallSeconds)}
+                  </span>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -2508,24 +3004,35 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {visibleCallLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-50/70">
-                        {currentRole === 'admin' && (
-                          <td className="py-3.5 px-4 font-bold text-slate-900">{log.participantName}</td>
-                        )}
-                        {currentRole === 'admin' && (
-                          <td className="py-3.5 px-4 uppercase font-bold text-slate-600">{log.participantRole}</td>
-                        )}
-                        <td className="py-3.5 px-4 font-semibold text-slate-800">{log.batchName}</td>
-                        <td className="py-3.5 px-4 text-slate-600">{log.sessionDate}</td>
-                        <td className="py-3.5 px-4 text-slate-600">
-                          {log.startedAt} – {log.endedAt}
-                        </td>
-                        <td className="py-3.5 px-4 text-right font-mono font-bold text-indigo-700">
-                          {formatDuration(log.durationSeconds)}
+                    {visibleCallLogs.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={currentRole === 'admin' ? 6 : 4}
+                          className="py-6 px-4 text-center text-slate-500"
+                        >
+                          No video calls recorded yet. Click <strong>Enter Live Classroom</strong> to start a session.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      visibleCallLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-50/70">
+                          {currentRole === 'admin' && (
+                            <td className="py-3.5 px-4 font-bold text-slate-900">{log.participantName}</td>
+                          )}
+                          {currentRole === 'admin' && (
+                            <td className="py-3.5 px-4 uppercase font-bold text-slate-600">{log.participantRole}</td>
+                          )}
+                          <td className="py-3.5 px-4 font-semibold text-slate-800">{log.batchName}</td>
+                          <td className="py-3.5 px-4 text-slate-600">{log.sessionDate}</td>
+                          <td className="py-3.5 px-4 text-slate-600">
+                            {log.startedAt} – {log.endedAt}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-mono font-bold text-indigo-700">
+                            {formatDuration(log.durationSeconds)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
