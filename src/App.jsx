@@ -288,6 +288,88 @@ const INITIAL_BATCHES = [
   }
 ];
 
+const INITIAL_CALL_LOGS = [
+  {
+    id: 'call-1',
+    userId: null,
+    participantName: 'Ranjitha Ganesh',
+    participantRole: 'admin',
+    batchId: 'b-1',
+    batchName: 'Alpha Champions (Level 3–8)',
+    roomCode: 'EvolveKids-Alpha-101',
+    sessionDate: '24 Nov 2026',
+    startedAt: '05:00 PM',
+    endedAt: '05:51 PM',
+    durationSeconds: 3060
+  },
+  {
+    id: 'call-2',
+    userId: null,
+    participantName: 'Aarav Sharma',
+    participantRole: 'student',
+    batchId: 'b-1',
+    batchName: 'Alpha Champions (Level 3–8)',
+    roomCode: 'EvolveKids-Alpha-101',
+    sessionDate: '24 Nov 2026',
+    startedAt: '05:01 PM',
+    endedAt: '05:50 PM',
+    durationSeconds: 2940
+  },
+  {
+    id: 'call-3',
+    userId: null,
+    participantName: 'Diya Nair',
+    participantRole: 'student',
+    batchId: 'b-1',
+    batchName: 'Alpha Champions (Level 3–8)',
+    roomCode: 'EvolveKids-Alpha-101',
+    sessionDate: '24 Nov 2026',
+    startedAt: '05:02 PM',
+    endedAt: '05:50 PM',
+    durationSeconds: 2880
+  },
+  {
+    id: 'call-4',
+    userId: null,
+    participantName: 'Priya Subramanian',
+    participantRole: 'staff',
+    batchId: 'b-2',
+    batchName: 'Junior Sparks (Level 1–2)',
+    roomCode: 'EvolveKids-Spark-202',
+    sessionDate: '21 Nov 2026',
+    startedAt: '06:00 PM',
+    endedAt: '06:50 PM',
+    durationSeconds: 3000
+  },
+  {
+    id: 'call-5',
+    userId: null,
+    participantName: 'Aarav Sharma',
+    participantRole: 'student',
+    batchId: 'b-1',
+    batchName: 'Alpha Champions (Level 3–8)',
+    roomCode: 'EvolveKids-Alpha-101',
+    sessionDate: '19 Nov 2026',
+    startedAt: '05:00 PM',
+    endedAt: '05:48 PM',
+    durationSeconds: 2880
+  }
+];
+
+function formatDuration(totalSeconds) {
+  const secs = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hrs = Math.floor(secs / 3600);
+  const mins = Math.floor((secs % 3600) / 60);
+  const remSecs = secs % 60;
+  if (hrs > 0) {
+    return `${hrs}h ${mins}m ${remSecs}s`;
+  }
+  if (mins > 0) {
+    return `${mins}m ${remSecs}s`;
+  }
+  return `${remSecs}s`;
+}
+
 // --- INTERACTIVE 11-ROD JAPANESE SOROBAN ABACUS COMPONENT ---
 function InteractiveSoroban() {
   const ROD_COUNT = 11;
@@ -523,7 +605,7 @@ function MentalMathFlashcard() {
 }
 
 // --- EMBEDDED JITSI MEET VIDEO CALL COMPONENT ---
-function JitsiVideoRoom({ roomCode, displayName, isJoined, onJoinToggle, onEndClass }) {
+function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoinToggle, onEndClass }) {
   const jitsiContainerRef = useRef(null);
   const apiRef = useRef(null);
   const [useIframeFallback, setUseIframeFallback] = useState(false);
@@ -617,11 +699,17 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, onJoinToggle, onEndCl
   return (
     <div className="bg-slate-900 text-white rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
       <div className="px-4 py-3 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
           <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
             Jitsi Meet Live Video Call • Room: <span className="font-mono text-amber-300">{sanitizedRoom}</span>
           </span>
+          {isJoined && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold">
+              <Clock className="w-3 h-3" />
+              Live Duration: {formatDuration(elapsedSeconds)}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -871,10 +959,13 @@ export default function App() {
   const [staff, setStaff] = useState(INITIAL_STAFF);
   const [students, setStudents] = useState(INITIAL_STUDENTS);
   const [batches, setBatches] = useState(INITIAL_BATCHES);
+  const [callLogs, setCallLogs] = useState(INITIAL_CALL_LOGS);
 
   // Classroom & Jitsi State
   const [activeBatchId, setActiveBatchId] = useState('b-1');
   const [jitsiJoined, setJitsiJoined] = useState(false);
+  const [callStartedAt, setCallStartedAt] = useState(null);
+  const [callElapsedSeconds, setCallElapsedSeconds] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [screenSharing, setScreenSharing] = useState(false);
@@ -979,12 +1070,13 @@ export default function App() {
     }
     setDataLoading(true);
     try {
-      const [batchesRes, studentsRes, profilesRes] = await Promise.all([
+      const [batchesRes, studentsRes, profilesRes, callLogsRes] = await Promise.all([
         supabase.from('batches').select('*').order('created_at', { ascending: true }),
         supabase.from('students').select('*').order('created_at', { ascending: false }),
         roleToFetch === 'admin' || roleToFetch === 'staff'
           ? supabase.from('profiles').select('id, email, full_name, role').order('created_at', { ascending: true })
-          : Promise.resolve({ data: null, error: null })
+          : Promise.resolve({ data: null, error: null }),
+        supabase.from('class_sessions').select('*').order('created_at', { ascending: false })
       ]);
 
       let liveLoaded = false;
@@ -1051,6 +1143,24 @@ export default function App() {
         }
       }
 
+      if (!callLogsRes.error && callLogsRes.data && callLogsRes.data.length > 0) {
+        setCallLogs(
+          callLogsRes.data.map((c) => ({
+            id: c.id,
+            userId: c.user_id || null,
+            participantName: c.participant_name || 'Member',
+            participantRole: c.participant_role || 'student',
+            batchId: c.batch_id || 'b-1',
+            batchName: c.batch_name || 'Abacus Live Class',
+            roomCode: c.room_code || 'EvolveKids-Classroom',
+            sessionDate: c.session_date || '24 Nov 2026',
+            startedAt: c.started_at || '05:00 PM',
+            endedAt: c.ended_at || '05:50 PM',
+            durationSeconds: Number(c.duration_seconds) || 0
+          }))
+        );
+      }
+
       setIsUsingLiveDb(liveLoaded);
     } catch (_err) {
       setIsUsingLiveDb(false);
@@ -1115,12 +1225,24 @@ export default function App() {
 
   // Ensure active tab is valid for current role
   useEffect(() => {
-    if (currentRole === 'student' && !['overview', 'classroom', 'payments'].includes(activeTab)) {
+    if (currentRole === 'student' && !['overview', 'classroom', 'attendance', 'payments'].includes(activeTab)) {
       setActiveTab('overview');
     } else if (currentRole === 'staff' && activeTab === 'payments') {
       setActiveTab('overview');
     }
   }, [currentRole, activeTab]);
+
+  // Live Call Timer Effect
+  useEffect(() => {
+    if (!jitsiJoined || !callStartedAt) {
+      setCallElapsedSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setCallElapsedSeconds(Math.max(1, Math.floor((Date.now() - callStartedAt) / 1000)));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [jitsiJoined, callStartedAt]);
 
   // Auth Handlers
   const handleSignIn = async (email, password) => {
@@ -1174,7 +1296,9 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
-    setJitsiJoined(false);
+    if (jitsiJoined) {
+      await finishAndLogVideoCall();
+    }
     if (supabase && session) {
       await supabase.auth.signOut();
     }
@@ -1246,10 +1370,96 @@ export default function App() {
     });
   }, [roleStudents, studentSearch, levelFilter, trainerFilter, feeFilter]);
 
+  // Video Call Logs filtered by Role (Admin sees ALL; Staff & Student see their own attended sessions)
+  const visibleCallLogs = useMemo(() => {
+    if (currentRole === 'admin') return callLogs;
+    return callLogs.filter((log) => {
+      if (session?.user?.id && log.userId) {
+        return log.userId === session.user.id;
+      }
+      const cleanUser = currentUserName.replace(/\s*\(Demo.*\)$/i, '').trim().toLowerCase();
+      return (
+        log.participantRole === currentRole &&
+        log.participantName.toLowerCase().includes(cleanUser.split(' ')[0] || '')
+      );
+    });
+  }, [callLogs, currentRole, session, currentUserName]);
+
+  const totalCallSeconds = useMemo(
+    () => visibleCallLogs.reduce((acc, log) => acc + (Number(log.durationSeconds) || 0), 0),
+    [visibleCallLogs]
+  );
+
+  // Start / Stop & Log Video Call Duration
+  const startVideoCallSession = (batchIdToJoin) => {
+    const targetBatchId = batchIdToJoin || activeBatchId;
+    setActiveBatchId(targetBatchId);
+    if (!jitsiJoined) {
+      setCallStartedAt(Date.now());
+      setCallElapsedSeconds(0);
+      setJitsiJoined(true);
+    }
+  };
+
+  const finishAndLogVideoCall = async () => {
+    if (!jitsiJoined) return;
+    const endTimeMs = Date.now();
+    const startTimeMs = callStartedAt || endTimeMs;
+    const durationSecs = Math.max(1, Math.round((endTimeMs - startTimeMs) / 1000));
+    const batch = batches.find((b) => b.id === activeBatchId) || batches[0];
+
+    const newLog = {
+      id: `call-${Date.now()}`,
+      userId: session?.user?.id || null,
+      participantName: currentUserName.replace(/\s*\(Demo.*\)$/i, '').trim(),
+      participantRole: currentRole,
+      batchId: batch?.id || 'b-1',
+      batchName: batch?.name || 'Abacus Live Class',
+      roomCode: batch?.roomCode || 'EvolveKids-Classroom',
+      sessionDate: new Date(endTimeMs).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      }),
+      startedAt: new Date(startTimeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      endedAt: new Date(endTimeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      durationSeconds: durationSecs
+    };
+
+    setCallLogs((prev) => [newLog, ...prev]);
+    setJitsiJoined(false);
+    setCallStartedAt(null);
+    setCallElapsedSeconds(0);
+
+    if (supabase && session) {
+      try {
+        const isUuid = (val) =>
+          typeof val === 'string' &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+        await supabase.from('class_sessions').insert({
+          user_id: session.user.id,
+          participant_name: newLog.participantName,
+          participant_role: currentRole,
+          batch_id: isUuid(newLog.batchId) ? newLog.batchId : null,
+          batch_name: newLog.batchName,
+          room_code: newLog.roomCode,
+          session_date: newLog.sessionDate,
+          started_at: newLog.startedAt,
+          ended_at: newLog.endedAt,
+          duration_seconds: durationSecs
+        });
+      } catch (_err) {
+        // Keep local state log if table hasn't been created yet
+      }
+    }
+
+    triggerToast(`Video session ended • Logged duration: ${formatDuration(durationSecs)}`);
+  };
+
   // Handlers
   const handleJoinClassroom = (batchId) => {
-    setActiveBatchId(batchId);
-    setJitsiJoined(true);
+    startVideoCallSession(batchId);
     setActiveTab('classroom');
     const batch = batches.find((b) => b.id === batchId);
     triggerToast(`Joined Live Video Classroom: ${batch?.name || 'Abacus Batch'}`);
@@ -1452,7 +1662,12 @@ export default function App() {
       { id: 'students', label: 'Students & Levels', icon: Users, count: roleStudents.length, roles: ['admin', 'staff'] },
       { id: 'staff', label: 'Staff & Roles', icon: UserCheck, count: staff.length, roles: ['admin', 'staff'] },
       { id: 'schedule', label: 'Class Timings', icon: Calendar, roles: ['admin', 'staff'] },
-      { id: 'attendance', label: 'Attendance Tracker', icon: ClipboardCheck, roles: ['admin', 'staff'] },
+      {
+        id: 'attendance',
+        label: currentRole === 'student' ? 'My Attended Sessions' : 'Attendance & Call Logs',
+        icon: ClipboardCheck,
+        roles: ['admin', 'staff', 'student']
+      },
       {
         id: 'payments',
         label: currentRole === 'student' ? 'My Fee Status' : 'Fees & 50–50 Payouts',
@@ -1806,19 +2021,25 @@ export default function App() {
               <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Attendance Rate
+                    {currentRole === 'admin' ? 'Total Video Call Duration' : 'My Video Call Duration'}
                   </span>
                   <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5" />
+                    <Clock className="w-5 h-5" />
                   </div>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-extrabold text-slate-900">{stats.avgAttendance}%</span>
+                  <span className="text-2xl font-extrabold text-slate-900">
+                    {formatDuration(totalCallSeconds)}
+                  </span>
                   <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                    On Track
+                    {visibleCallLogs.length} {visibleCallLogs.length === 1 ? 'session' : 'sessions'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">2 online sessions/week</p>
+                <p className="text-xs text-slate-500 mt-2">
+                  {currentRole === 'admin'
+                    ? 'Across all trainers & students'
+                    : `Attendance rate: ${stats.avgAttendance}%`}
+                </p>
               </div>
             </div>
 
@@ -1902,6 +2123,89 @@ export default function App() {
                 })}
               </div>
             </div>
+
+            {/* Video Call Duration & Attended Sessions Log (Role-Scoped) */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {currentRole === 'admin'
+                      ? 'All Video Call Sessions & Durations (Admin Audit)'
+                      : 'My Attended Video Sessions & Time Duration'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Automatically recorded whenever a participant joins and leaves a Jitsi live video room
+                  </p>
+                </div>
+                <div className="px-3.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-800">
+                  Total Time: {formatDuration(totalCallSeconds)}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      {currentRole === 'admin' && <th className="py-3 px-4">Participant</th>}
+                      {currentRole === 'admin' && <th className="py-3 px-4">Role</th>}
+                      <th className="py-3 px-4">Batch / Live Class</th>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Time Window</th>
+                      <th className="py-3 px-4 text-right">Call Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {visibleCallLogs.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={currentRole === 'admin' ? 6 : 4}
+                          className="py-6 px-4 text-center text-slate-500"
+                        >
+                          No video calls recorded yet. Click <strong>Enter Live Classroom</strong> to start a session.
+                        </td>
+                      </tr>
+                    ) : (
+                      visibleCallLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-50/70">
+                          {currentRole === 'admin' && (
+                            <td className="py-3 px-4 font-bold text-slate-900">{log.participantName}</td>
+                          )}
+                          {currentRole === 'admin' && (
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                  log.participantRole === 'admin'
+                                    ? 'bg-indigo-100 text-indigo-800'
+                                    : log.participantRole === 'staff'
+                                    ? 'bg-teal-100 text-teal-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {log.participantRole}
+                              </span>
+                            </td>
+                          )}
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-800">{log.batchName}</div>
+                            <div className="text-[11px] font-mono text-slate-400">{log.roomCode}</div>
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-700">{log.sessionDate}</td>
+                          <td className="py-3 px-4 text-slate-600">
+                            {log.startedAt} – {log.endedAt}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono font-bold">
+                              <Clock className="w-3 h-3" />
+                              {formatDuration(log.durationSeconds)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1974,10 +2278,9 @@ export default function App() {
                 )}
                 <button
                   type="button"
-                  onClick={() => {
-                    setJitsiJoined(false);
+                  onClick={async () => {
+                    await finishAndLogVideoCall();
                     setActiveTab('overview');
-                    triggerToast('Left live classroom');
                   }}
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer"
                 >
@@ -1994,8 +2297,9 @@ export default function App() {
                   roomCode={currentLiveBatch.roomCode}
                   displayName={currentUserName}
                   isJoined={jitsiJoined}
-                  onJoinToggle={() => setJitsiJoined(true)}
-                  onEndClass={() => setJitsiJoined(false)}
+                  elapsedSeconds={callElapsedSeconds}
+                  onJoinToggle={() => startVideoCallSession(activeBatchId)}
+                  onEndClass={finishAndLogVideoCall}
                 />
 
                 {/* Interactive Digital Soroban */}
@@ -2081,429 +2385,150 @@ export default function App() {
         )}
 
         {/* ===================================================================== */}
-        {/* TAB 3: STUDENTS DIRECTORY (ADMIN & STAFF)                             */}
+        {/* TAB 6: SESSION ATTENDANCE TRACKER & CALL DURATIONS                    */}
         {/* ===================================================================== */}
-        {activeTab === 'students' && currentRole !== 'student' && (
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col md:flex-row gap-3 justify-between">
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={studentSearch}
-                  onChange={(e) => setStudentSearch(e.target.value)}
-                  placeholder="Search student name or abacus level..."
-                  className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
-                />
-              </div>
+        {activeTab === 'attendance' && (
+          <div className="space-y-6">
+            {currentRole !== 'student' && (
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Session Attendance & 8-Class Cycle Tracker</h3>
+                    <p className="text-xs text-slate-500">
+                      Marking Present/Late updates the student's 8-session monthly cycle
+                    </p>
+                  </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={levelFilter}
-                  onChange={(e) => setLevelFilter(e.target.value)}
-                  className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
-                >
-                  <option value="All">All Abacus Levels</option>
-                  <option value="Level 1">Level 1</option>
-                  <option value="Level 2">Level 2</option>
-                  <option value="Level 3">Level 3</option>
-                  <option value="Level 4">Level 4</option>
-                  <option value="Level 5">Level 5</option>
-                  <option value="Level 6">Level 6</option>
-                  <option value="Level 8">Level 8 (Grandmaster)</option>
-                </select>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <select
+                      value={attendanceBatchId}
+                      onChange={(e) => setAttendanceBatchId(e.target.value)}
+                      className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none"
+                    >
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="date"
+                      value={sessionDate}
+                      onChange={(e) => setSessionDate(e.target.value)}
+                      className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none"
+                    />
+                  </div>
+                </div>
 
-                <select
-                  value={trainerFilter}
-                  onChange={(e) => setTrainerFilter(e.target.value)}
-                  className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
-                >
-                  <option value="All">All Trainers</option>
-                  {staff.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.name}
-                    </option>
-                  ))}
-                </select>
-
-                {currentRole === 'admin' && (
-                  <select
-                    value={feeFilter}
-                    onChange={(e) => setFeeFilter(e.target.value)}
-                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
-                  >
-                    <option value="All">All Fee Status</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Due Soon">Due Soon</option>
-                    <option value="Overdue">Overdue</option>
-                  </select>
-                )}
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    <th className="py-3.5 px-4">Student</th>
-                    <th className="py-3.5 px-4">Abacus Level</th>
-                    <th className="py-3.5 px-4">Assigned Trainer</th>
-                    <th className="py-3.5 px-4">8-Session Cycle</th>
-                    <th className="py-3.5 px-4">Attendance</th>
-                    {currentRole === 'admin' && <th className="py-3.5 px-4">Fee Status</th>}
-                    <th className="py-3.5 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {filteredStudents.map((stu) => {
-                    const progressPct = Math.round((stu.sessionsCompleted / stu.totalCycleSessions) * 100);
-                    return (
-                      <tr key={stu.id} className="hover:bg-slate-50/70 transition">
-                        <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900">{stu.name}</div>
-                          <div className="text-xs text-slate-500">{stu.parentPhone}</div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                            <Award className="w-3.5 h-3.5" />
-                            {stu.level}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-xs font-semibold text-slate-700">
-                          {getTrainerName(stu.trainerId)}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="w-36">
-                            <div className="flex justify-between text-xs font-semibold mb-1">
-                              <span>{stu.sessionsCompleted} / 8</span>
-                              <span className="text-slate-500">{progressPct}%</span>
+                <div className="space-y-3">
+                  {students
+                    .filter((s) => s.batchId === attendanceBatchId)
+                    .map((stu) => {
+                      const status = todayAttendance[stu.id] || 'Present';
+                      return (
+                        <div
+                          key={stu.id}
+                          className="p-4 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-slate-900">{stu.name}</span>
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700">
+                                {stu.level}
+                              </span>
                             </div>
-                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${
-                                  stu.sessionsCompleted === 8 ? 'bg-amber-500' : 'bg-teal-500'
-                                }`}
-                                style={{ width: `${progressPct}%` }}
-                              />
-                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Cycle: <strong className="text-slate-800">{stu.sessionsCompleted} / 8 sessions</strong> • Attendance: {stu.attendanceRate}%
+                            </p>
                           </div>
-                        </td>
-                        <td className="py-3.5 px-4 text-xs font-bold text-slate-800">{stu.attendanceRate}%</td>
-                        {currentRole === 'admin' && (
-                          <td className="py-3.5 px-4">
-                            <span
-                              className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
-                                stu.feeStatus === 'Paid'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : stu.feeStatus === 'Due Soon'
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : 'bg-rose-50 text-rose-700 border border-rose-200'
-                              }`}
-                            >
-                              {stu.feeStatus} (₹{stu.monthlyFee})
-                            </span>
-                          </td>
-                        )}
-                        <td className="py-3.5 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleJoinClassroom(stu.batchId)}
-                            className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition cursor-pointer"
-                          >
-                            Join Batch
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
 
-        {/* ===================================================================== */}
-        {/* TAB 4: STAFF & ROLE ACCESS MANAGEMENT                                 */}
-        {/* ===================================================================== */}
-        {activeTab === 'staff' && currentRole !== 'student' && (
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Certified Abacus Trainers & Role Access</h3>
-                <p className="text-xs text-slate-500">
-                  {currentRole === 'admin'
-                    ? 'Manage trainer profiles, 50–50 revenue share, and user access roles'
-                    : 'View teaching staff roster and assigned batches'}
-                </p>
-              </div>
-              {currentRole === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddStaffModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-sm transition cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Trainer
-                </button>
-              )}
-            </div>
+                          <div className="flex items-center gap-2">
+                            {['Present', 'Late', 'Absent'].map((opt) => {
+                              const active = status === opt;
+                              const styles =
+                                opt === 'Present'
+                                  ? active
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50'
+                                  : opt === 'Late'
+                                  ? active
+                                    ? 'bg-amber-500 text-white border-amber-500'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50'
+                                  : active
+                                  ? 'bg-rose-600 text-white border-rose-600'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-rose-50';
 
-            {/* Live Supabase User Role Control (Admin Only) */}
-            {currentRole === 'admin' && profilesList.length > 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
-                <h4 className="text-sm font-bold text-slate-900 mb-3">Supabase Account Roles (public.profiles)</h4>
-                <div className="divide-y divide-slate-100">
-                  {profilesList.map((u) => (
-                    <div key={u.id} className="py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-                      <div>
-                        <span className="font-bold text-slate-900">{u.full_name || u.email}</span>
-                        <span className="text-slate-500 ml-2">{u.email}</span>
-                      </div>
-                      <select
-                        value={u.role || 'student'}
-                        onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                        className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 font-bold text-slate-800"
-                      >
-                        <option value="admin">admin</option>
-                        <option value="staff">staff</option>
-                        <option value="student">student</option>
-                      </select>
-                    </div>
-                  ))}
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => handleMarkAttendance(stu.id, opt)}
+                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${styles}`}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {staff.map((member) => {
-                const assignedStudents = students.filter((s) => s.trainerId === member.id);
-                const grossFees = assignedStudents.reduce((acc, s) => acc + s.monthlyFee, 0);
-                const trainerPayout = Math.round((grossFees * member.sharePercent) / 100);
-
-                return (
-                  <div
-                    key={member.id}
-                    className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-3 mb-4">
-                        <div className="flex items-center gap-3.5">
-                          <div
-                            className={`w-12 h-12 rounded-2xl ${member.avatarColor} text-white font-extrabold flex items-center justify-center text-base shadow`}
-                          >
-                            {member.name
-                              .split(' ')
-                              .map((n) => n[0])
-                              .join('')}
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-base text-slate-900">{member.name}</h4>
-                            <p className="text-xs text-slate-500 font-medium">{member.role}</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">{member.email}</p>
-                          </div>
-                        </div>
-
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
-                          {member.status}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className={`grid ${currentRole === 'admin' ? 'grid-cols-3' : 'grid-cols-2'} gap-2 pt-3 border-t border-slate-100 text-center`}>
-                      <div className="bg-slate-50 rounded-xl p-2.5">
-                        <div className="text-lg font-extrabold text-slate-900">{assignedStudents.length}</div>
-                        <div className="text-[11px] text-slate-500 font-medium">Students</div>
-                      </div>
-                      <div className="bg-slate-50 rounded-xl p-2.5">
-                        <div className="text-lg font-extrabold text-slate-900">{member.classesThisWeek}</div>
-                        <div className="text-[11px] text-slate-500 font-medium">Classes / Wk</div>
-                      </div>
-                      {currentRole === 'admin' && (
-                        <div className="bg-indigo-50 rounded-xl p-2.5">
-                          <div className="text-lg font-extrabold text-indigo-700">
-                            ₹{trainerPayout.toLocaleString('en-IN')}
-                          </div>
-                          <div className="text-[11px] text-indigo-600 font-semibold">
-                            {member.sharePercent}% Share
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================== */}
-        {/* TAB 5: CLASS TIMINGS & BATCH SCHEDULE                                 */}
-        {/* ===================================================================== */}
-        {activeTab === 'schedule' && currentRole !== 'student' && (
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Weekly Online Abacus Batch Schedule</h3>
-                <p className="text-xs text-slate-500">
-                  2 sessions per week (50 mins each • 8 sessions/month cycle)
-                </p>
-              </div>
-              <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700">
-                IST (Asia/Kolkata)
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {batches.map((batch) => {
-                const batchStudents = students.filter((s) => s.batchId === batch.id);
-                return (
-                  <div
-                    key={batch.id}
-                    className="rounded-2xl border border-slate-200 p-5 hover:border-indigo-300 transition bg-slate-50/40"
-                  >
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-md">
-                          {batch.days}
-                        </span>
-                        <h4 className="text-base font-extrabold text-slate-900 mt-1.5">{batch.name}</h4>
-                      </div>
-                      <span className="text-xs font-mono font-bold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
-                        {batch.roomCode}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 text-xs text-slate-600 mb-4">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-indigo-500" />
-                        <span className="font-semibold text-slate-800">{batch.time}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <UserCheck className="w-4 h-4 text-teal-600" />
-                        <span>
-                          Trainer: <strong className="text-slate-900">{getTrainerName(batch.trainerId)}</strong>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-amber-500" />
-                        <span>Enrolled: {batchStudents.length} students</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-3 border-t border-slate-200/70">
-                      <button
-                        type="button"
-                        onClick={() => handleJoinClassroom(batch.id)}
-                        className="flex-1 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                      >
-                        <Video className="w-3.5 h-3.5" />
-                        Launch Video Room
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAttendanceBatchId(batch.id);
-                          setActiveTab('attendance');
-                        }}
-                        className="py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold transition cursor-pointer"
-                      >
-                        Attendance
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================== */}
-        {/* TAB 6: SESSION ATTENDANCE TRACKER                                     */}
-        {/* ===================================================================== */}
-        {activeTab === 'attendance' && currentRole !== 'student' && (
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Session Attendance & 8-Class Cycle Tracker</h3>
-                <p className="text-xs text-slate-500">
-                  Marking Present/Late updates the student's 8-session monthly cycle
-                </p>
+            {/* Video Call Duration History */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {currentRole === 'admin'
+                      ? 'All Video Call Durations (Staff & Students)'
+                      : 'Sessions Attended & Video Call Time Duration'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Detailed start time, end time, and exact call duration per live session
+                  </p>
+                </div>
+                <span className="px-3.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
+                  Cumulative Time: {formatDuration(totalCallSeconds)}
+                </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <select
-                  value={attendanceBatchId}
-                  onChange={(e) => setAttendanceBatchId(e.target.value)}
-                  className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none"
-                >
-                  {batches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="date"
-                  value={sessionDate}
-                  onChange={(e) => setSessionDate(e.target.value)}
-                  className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none"
-                />
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      {currentRole === 'admin' && <th className="py-3.5 px-4">Participant</th>}
+                      {currentRole === 'admin' && <th className="py-3.5 px-4">Role</th>}
+                      <th className="py-3.5 px-4">Batch</th>
+                      <th className="py-3.5 px-4">Date</th>
+                      <th className="py-3.5 px-4">Start – End</th>
+                      <th className="py-3.5 px-4 text-right">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {visibleCallLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50/70">
+                        {currentRole === 'admin' && (
+                          <td className="py-3.5 px-4 font-bold text-slate-900">{log.participantName}</td>
+                        )}
+                        {currentRole === 'admin' && (
+                          <td className="py-3.5 px-4 uppercase font-bold text-slate-600">{log.participantRole}</td>
+                        )}
+                        <td className="py-3.5 px-4 font-semibold text-slate-800">{log.batchName}</td>
+                        <td className="py-3.5 px-4 text-slate-600">{log.sessionDate}</td>
+                        <td className="py-3.5 px-4 text-slate-600">
+                          {log.startedAt} – {log.endedAt}
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-mono font-bold text-indigo-700">
+                          {formatDuration(log.durationSeconds)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            <div className="space-y-3">
-              {students
-                .filter((s) => s.batchId === attendanceBatchId)
-                .map((stu) => {
-                  const status = todayAttendance[stu.id] || 'Present';
-                  return (
-                    <div
-                      key={stu.id}
-                      className="p-4 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-900">{stu.name}</span>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700">
-                            {stu.level}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-1">
-                          Cycle: <strong className="text-slate-800">{stu.sessionsCompleted} / 8 sessions</strong> • Attendance: {stu.attendanceRate}%
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {['Present', 'Late', 'Absent'].map((opt) => {
-                          const active = status === opt;
-                          const styles =
-                            opt === 'Present'
-                              ? active
-                                ? 'bg-emerald-600 text-white border-emerald-600'
-                                : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50'
-                              : opt === 'Late'
-                              ? active
-                                ? 'bg-amber-500 text-white border-amber-500'
-                                : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50'
-                              : active
-                              ? 'bg-rose-600 text-white border-rose-600'
-                              : 'bg-white text-slate-600 border-slate-200 hover:bg-rose-50';
-
-                          return (
-                            <button
-                              key={opt}
-                              type="button"
-                              onClick={() => handleMarkAttendance(stu.id, opt)}
-                              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${styles}`}
-                            >
-                              {opt}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
             </div>
           </div>
         )}
