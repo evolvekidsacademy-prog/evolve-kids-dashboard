@@ -912,6 +912,7 @@ export default function App() {
   // New Student Form State
   const [newStudent, setNewStudent] = useState({
     name: '',
+    userId: '',
     age: 8,
     level: 'Level 1',
     trainerId: 'st-2',
@@ -1351,37 +1352,46 @@ export default function App() {
     e.preventDefault();
     if (!newStudent.name.trim() || currentRole === 'student') return;
 
+    const isUuid = (val) =>
+      typeof val === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
     const payload = {
       full_name: newStudent.name.trim(),
+      user_id: isUuid(newStudent.userId) ? newStudent.userId : null,
       parent_phone: newStudent.parentPhone || '+91 98400 00000',
       abacus_level: newStudent.level,
-      batch_id: newStudent.batchId,
-      trainer_id: newStudent.trainerId,
+      batch_id: isUuid(newStudent.batchId) ? newStudent.batchId : null,
+      trainer_id: isUuid(newStudent.trainerId) ? newStudent.trainerId : null,
       sessions_completed: 0,
       monthly_fee: Number(newStudent.monthlyFee) || 1500,
       fee_status: 'Paid'
     };
 
     let createdId = `stu-${Date.now()}`;
-    if (supabase && session && isUsingLiveDb) {
-      try {
-        const { data, error } = await supabase.from('students').insert(payload).select().single();
-        if (!error && data?.id) {
-          createdId = data.id;
-        }
-      } catch (_err) {
-        // fallback to local id
+    let savedToDb = false;
+
+    if (supabase && session) {
+      const { data, error } = await supabase.from('students').insert(payload).select().single();
+      if (error) {
+        triggerToast(`Supabase save error: ${error.message}`);
+        return;
+      }
+      if (data?.id) {
+        createdId = data.id;
+        savedToDb = true;
+        setIsUsingLiveDb(true);
       }
     }
 
     const created = {
       id: createdId,
-      userId: null,
+      userId: payload.user_id,
       name: payload.full_name,
       age: Number(newStudent.age) || 8,
       level: payload.abacus_level,
-      trainerId: payload.trainer_id,
-      batchId: payload.batch_id,
+      trainerId: newStudent.trainerId,
+      batchId: newStudent.batchId,
       sessionsCompleted: 0,
       totalCycleSessions: 8,
       attendanceRate: 100,
@@ -1392,10 +1402,23 @@ export default function App() {
       parentPhone: payload.parent_phone
     };
 
-    setStudents((prev) => [created, ...prev]);
+    setStudents((prev) => (savedToDb && !isUsingLiveDb ? [created] : [created, ...prev]));
     setShowAddStudentModal(false);
-    setNewStudent({ name: '', age: 8, level: 'Level 1', trainerId: 'st-2', batchId: 'b-2', monthlyFee: 1500, parentPhone: '' });
-    triggerToast(`${created.name} enrolled successfully!`);
+    setNewStudent({
+      name: '',
+      userId: '',
+      age: 8,
+      level: 'Level 1',
+      trainerId: staff[0]?.id || 'st-2',
+      batchId: batches[0]?.id || 'b-2',
+      monthlyFee: 1500,
+      parentPhone: ''
+    });
+    triggerToast(
+      savedToDb
+        ? `${created.name} saved to Supabase database!`
+        : `${created.name} enrolled in preview mode!`
+    );
   };
 
   const handleAddStaffSubmit = (e) => {
@@ -2627,36 +2650,34 @@ export default function App() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {profilesList.length > 0 && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Age (Years)</label>
-                  <input
-                    type="number"
-                    min="4"
-                    max="16"
-                    value={newStudent.age}
-                    onChange={(e) => setNewStudent({ ...newStudent, age: e.target.value })}
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Abacus Level</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Link Student Login Account (Optional)
+                  </label>
                   <select
-                    value={newStudent.level}
-                    onChange={(e) => setNewStudent({ ...newStudent, level: e.target.value })}
+                    value={newStudent.userId}
+                    onChange={(e) => {
+                      const selectedProfile = profilesList.find((p) => p.id === e.target.value);
+                      setNewStudent({
+                        ...newStudent,
+                        userId: e.target.value,
+                        name: newStudent.name || selectedProfile?.full_name || ''
+                      });
+                    }}
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
                   >
-                    <option>Level 1</option>
-                    <option>Level 2</option>
-                    <option>Level 3</option>
-                    <option>Level 4</option>
-                    <option>Level 5</option>
-                    <option>Level 6</option>
-                    <option>Level 7</option>
-                    <option>Level 8 (Grandmaster)</option>
+                    <option value="">-- Not linked yet (Admin/Staff managed) --</option>
+                    {profilesList
+                      .filter((p) => p.role === 'student')
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.full_name || p.email} ({p.email})
+                        </option>
+                      ))}
                   </select>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
