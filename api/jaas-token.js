@@ -116,7 +116,7 @@ export default async function handler(req, res) {
         id: userResult.user.id,
         name: profile.full_name || userResult.user.email || 'Evolve Kids user',
         email: userResult.user.email || '',
-        moderator: role === 'admin' || role === 'staff'
+        moderator: role === 'admin' || role === 'staff' ? 'true' : 'false'
       },
       features: {
         livestreaming: false,

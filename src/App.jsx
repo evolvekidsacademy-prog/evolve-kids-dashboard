@@ -1889,7 +1889,8 @@ export default function App() {
             {session && (
               <button
                 type="button"
-                onClick={() => loadAcademyData(currentRole)}
+                onClick={() => loadAcademyData(currentRole, profile, session.user.id)}
+                disabled={dataLoading}
                 className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold transition cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${dataLoading ? 'animate-spin' : ''}`} />
