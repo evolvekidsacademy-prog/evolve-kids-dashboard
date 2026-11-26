@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard,
   Video,
@@ -13,16 +13,13 @@ import {
   MicOff,
   VideoOff,
   MonitorUp,
-  Hand,
   PhoneOff,
   RotateCcw,
   Sparkles,
   CheckCircle2,
   Clock,
-  AlertCircle,
   Send,
   Award,
-  TrendingUp,
   ChevronRight,
   X,
   Check,
@@ -33,7 +30,6 @@ import {
   ShieldCheck,
   ExternalLink,
   RefreshCw,
-  Lock
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -41,7 +37,7 @@ import { createClient } from '@supabase/supabase-js';
 const getEnvVar = (key) => {
   try {
     return (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) || '';
-  } catch (_err) {
+  } catch {
     return '';
   }
 };
@@ -50,324 +46,12 @@ const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
 const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
-// --- INITIAL FALLBACK DEMO DATA ---
-const INITIAL_STAFF = [
-  {
-    id: 'st-1',
-    name: 'Ranjitha Ganesh',
-    role: 'Founder & Lead Master Trainer',
-    specialties: ['Level 1–8', 'Grandmaster Anzan', 'Trainer Certification'],
-    email: 'ranjitha@evolvekids.in',
-    phone: '+91 98401 22310',
-    activeBatches: 4,
-    classesThisWeek: 12,
-    sharePercent: 100,
-    status: 'In Live Class',
-    avatarColor: 'bg-indigo-600'
-  },
-  {
-    id: 'st-2',
-    name: 'Priya Subramanian',
-    role: 'Senior Abacus Trainer',
-    specialties: ['Level 1–5', 'Junior Foundation'],
-    email: 'priya.s@evolvekids.in',
-    phone: '+91 98402 44891',
-    activeBatches: 3,
-    classesThisWeek: 8,
-    sharePercent: 50,
-    status: 'Available',
-    avatarColor: 'bg-teal-600'
-  },
-  {
-    id: 'st-3',
-    name: 'Karthik Narayanan',
-    role: 'Abacus & Speed Math Trainer',
-    specialties: ['Level 3–7', 'Competition Prep'],
-    email: 'karthik.n@evolvekids.in',
-    phone: '+91 98403 77120',
-    activeBatches: 3,
-    classesThisWeek: 6,
-    sharePercent: 50,
-    status: 'Upcoming Class',
-    avatarColor: 'bg-violet-600'
-  },
-  {
-    id: 'st-4',
-    name: 'Meera Krishnan',
-    role: 'Junior Abacus & Phonics Trainer',
-    specialties: ['Level 1–3', 'Little Champs (5–7 yrs)'],
-    email: 'meera.k@evolvekids.in',
-    phone: '+91 98404 99012',
-    activeBatches: 2,
-    classesThisWeek: 4,
-    sharePercent: 50,
-    status: 'Available',
-    avatarColor: 'bg-amber-600'
-  }
-];
+const normalizeRole = (role) => {
+  const normalized = typeof role === 'string' ? role.trim().toLowerCase() : '';
+  return ['admin', 'staff', 'student'].includes(normalized) ? normalized : null;
+};
 
-const INITIAL_STUDENTS = [
-  {
-    id: 'stu-101',
-    userId: null,
-    name: 'Aarav Sharma',
-    age: 8,
-    level: 'Level 3',
-    trainerId: 'st-1',
-    batchId: 'b-1',
-    sessionsCompleted: 6,
-    totalCycleSessions: 8,
-    attendanceRate: 96,
-    monthlyFee: 1800,
-    feeStatus: 'Paid',
-    paymentMode: 'UPI',
-    lastPaidDate: '04 Nov 2026',
-    parentPhone: '+91 98841 10021'
-  },
-  {
-    id: 'stu-102',
-    userId: null,
-    name: 'Diya Nair',
-    age: 9,
-    level: 'Level 4',
-    trainerId: 'st-1',
-    batchId: 'b-1',
-    sessionsCompleted: 8,
-    totalCycleSessions: 8,
-    attendanceRate: 100,
-    monthlyFee: 2000,
-    feeStatus: 'Due Soon',
-    paymentMode: 'Pending',
-    lastPaidDate: '26 Oct 2026',
-    parentPhone: '+91 98841 10022'
-  },
-  {
-    id: 'stu-103',
-    userId: null,
-    name: 'Rohan Verma',
-    age: 7,
-    level: 'Level 1',
-    trainerId: 'st-2',
-    batchId: 'b-2',
-    sessionsCompleted: 5,
-    totalCycleSessions: 8,
-    attendanceRate: 88,
-    monthlyFee: 1500,
-    feeStatus: 'Paid',
-    paymentMode: 'Bank Transfer',
-    lastPaidDate: '08 Nov 2026',
-    parentPhone: '+91 98841 10023'
-  },
-  {
-    id: 'stu-104',
-    userId: null,
-    name: 'Ananya Iyer',
-    age: 11,
-    level: 'Level 6',
-    trainerId: 'st-3',
-    batchId: 'b-3',
-    sessionsCompleted: 7,
-    totalCycleSessions: 8,
-    attendanceRate: 94,
-    monthlyFee: 2200,
-    feeStatus: 'Paid',
-    paymentMode: 'UPI',
-    lastPaidDate: '02 Nov 2026',
-    parentPhone: '+91 98841 10024'
-  },
-  {
-    id: 'stu-105',
-    userId: null,
-    name: 'Kabir Menon',
-    age: 6,
-    level: 'Level 1',
-    trainerId: 'st-4',
-    batchId: 'b-4',
-    sessionsCompleted: 8,
-    totalCycleSessions: 8,
-    attendanceRate: 92,
-    monthlyFee: 1500,
-    feeStatus: 'Overdue',
-    paymentMode: 'Pending',
-    lastPaidDate: '19 Oct 2026',
-    parentPhone: '+91 98841 10025'
-  },
-  {
-    id: 'stu-106',
-    userId: null,
-    name: 'Saanvi Reddy',
-    age: 10,
-    level: 'Level 5',
-    trainerId: 'st-2',
-    batchId: 'b-2',
-    sessionsCompleted: 4,
-    totalCycleSessions: 8,
-    attendanceRate: 100,
-    monthlyFee: 2000,
-    feeStatus: 'Paid',
-    paymentMode: 'Card',
-    lastPaidDate: '11 Nov 2026',
-    parentPhone: '+91 98841 10026'
-  },
-  {
-    id: 'stu-107',
-    userId: null,
-    name: 'Vihaan Gupta',
-    age: 12,
-    level: 'Level 8 (Grandmaster)',
-    trainerId: 'st-1',
-    batchId: 'b-1',
-    sessionsCompleted: 7,
-    totalCycleSessions: 8,
-    attendanceRate: 98,
-    monthlyFee: 2500,
-    feeStatus: 'Paid',
-    paymentMode: 'UPI',
-    lastPaidDate: '05 Nov 2026',
-    parentPhone: '+91 98841 10027'
-  },
-  {
-    id: 'stu-108',
-    userId: null,
-    name: 'Myra Joshi',
-    age: 8,
-    level: 'Level 2',
-    trainerId: 'st-3',
-    batchId: 'b-3',
-    sessionsCompleted: 8,
-    totalCycleSessions: 8,
-    attendanceRate: 85,
-    monthlyFee: 1600,
-    feeStatus: 'Due Soon',
-    paymentMode: 'Pending',
-    lastPaidDate: '27 Oct 2026',
-    parentPhone: '+91 98841 10028'
-  }
-];
-
-const INITIAL_BATCHES = [
-  {
-    id: 'b-1',
-    name: 'Alpha Champions (Level 3–8)',
-    days: 'Tue & Thu',
-    time: '05:00 PM – 05:50 PM',
-    level: 'Level 3–8',
-    trainerId: 'st-1',
-    status: 'Live Now',
-    roomCode: 'EvolveKids-Alpha-101'
-  },
-  {
-    id: 'b-2',
-    name: 'Junior Sparks (Level 1–2)',
-    days: 'Tue & Thu',
-    time: '06:00 PM – 06:50 PM',
-    level: 'Level 1–2',
-    trainerId: 'st-2',
-    status: 'Starting in 45m',
-    roomCode: 'EvolveKids-Spark-202'
-  },
-  {
-    id: 'b-3',
-    name: 'Speed Anzan Masters (Level 5–7)',
-    days: 'Wed & Fri',
-    time: '05:30 PM – 06:20 PM',
-    level: 'Level 5–7',
-    trainerId: 'st-3',
-    status: 'Scheduled',
-    roomCode: 'EvolveKids-Anzan-303'
-  },
-  {
-    id: 'b-4',
-    name: 'Little Beads Foundation (Level 1)',
-    days: 'Sat & Sun',
-    time: '10:30 AM – 11:20 AM',
-    level: 'Level 1',
-    trainerId: 'st-4',
-    status: 'Scheduled',
-    roomCode: 'EvolveKids-Beads-404'
-  }
-];
-
-const INITIAL_CALL_LOGS = [
-  {
-    id: 'call-1',
-    userId: null,
-    participantName: 'Ranjitha Ganesh',
-    participantRole: 'admin',
-    batchId: 'b-1',
-    batchName: 'Alpha Champions (Level 3–8)',
-    roomCode: 'EvolveKids-Alpha-101',
-    sessionDate: '24 Nov 2026',
-    startedAt: '05:00 PM',
-    endedAt: '05:51 PM',
-    durationSeconds: 3060
-  },
-  {
-    id: 'call-2',
-    userId: null,
-    participantName: 'Aarav Sharma',
-    participantRole: 'student',
-    batchId: 'b-1',
-    batchName: 'Alpha Champions (Level 3–8)',
-    roomCode: 'EvolveKids-Alpha-101',
-    sessionDate: '24 Nov 2026',
-    startedAt: '05:01 PM',
-    endedAt: '05:50 PM',
-    durationSeconds: 2940
-  },
-  {
-    id: 'call-3',
-    userId: null,
-    participantName: 'Diya Nair',
-    participantRole: 'student',
-    batchId: 'b-1',
-    batchName: 'Alpha Champions (Level 3–8)',
-    roomCode: 'EvolveKids-Alpha-101',
-    sessionDate: '24 Nov 2026',
-    startedAt: '05:02 PM',
-    endedAt: '05:50 PM',
-    durationSeconds: 2880
-  },
-  {
-    id: 'call-4',
-    userId: null,
-    participantName: 'Priya Subramanian',
-    participantRole: 'staff',
-    batchId: 'b-2',
-    batchName: 'Junior Sparks (Level 1–2)',
-    roomCode: 'EvolveKids-Spark-202',
-    sessionDate: '21 Nov 2026',
-    startedAt: '06:00 PM',
-    endedAt: '06:50 PM',
-    durationSeconds: 3000
-  },
-  {
-    id: 'call-5',
-    userId: null,
-    participantName: 'Priya Subramanian',
-    participantRole: 'staff',
-    batchId: 'b-2',
-    batchName: 'Junior Sparks (Level 1–2)',
-    roomCode: 'EvolveKids-Spark-202',
-    sessionDate: '19 Nov 2026',
-    startedAt: '06:00 PM',
-    endedAt: '06:49 PM',
-    durationSeconds: 2940
-  },
-  {
-    id: 'call-6',
-    userId: null,
-    participantName: 'Aarav Sharma',
-    participantRole: 'student',
-    batchId: 'b-1',
-    batchName: 'Alpha Champions (Level 3–8)',
-    roomCode: 'EvolveKids-Alpha-101',
-    sessionDate: '19 Nov 2026',
-    startedAt: '05:00 PM',
-    endedAt: '05:48 PM',
-    durationSeconds: 2880
-  }
-];
+const getCurrentTimestamp = () => Date.now();
 
 function formatDuration(totalSeconds) {
   const secs = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -536,7 +220,7 @@ function InteractiveSoroban() {
 // --- MENTAL MATH ANZAN FLASHCARD WIDGET ---
 function MentalMathFlashcard() {
   const [level, setLevel] = useState('Junior (1-Digit)');
-  const [numbers, setNumbers] = useState([4, 3, -2, 5]);
+  const [numbers, setNumbers] = useState([]);
   const [showAnswer, setShowAnswer] = useState(false);
 
   const generateSequence = () => {
@@ -579,6 +263,7 @@ function MentalMathFlashcard() {
       </div>
 
       <div className="flex items-center justify-center gap-2 bg-slate-950/80 border border-indigo-800/60 rounded-xl py-3 px-2 mb-3 flex-wrap">
+        {numbers.length === 0 && <span className="text-xs text-slate-400">Generate a drill to begin.</span>}
         {numbers.map((num, idx) => (
           <span
             key={idx}
@@ -591,10 +276,14 @@ function MentalMathFlashcard() {
             {num > 0 && idx > 0 ? `+${num}` : num}
           </span>
         ))}
-        <span className="text-slate-400 font-bold">=</span>
-        <span className="font-mono text-xl font-black px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-          {showAnswer ? sum : '?'}
-        </span>
+        {numbers.length > 0 && (
+          <>
+            <span className="text-slate-400 font-bold">=</span>
+            <span className="font-mono text-xl font-black px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              {showAnswer ? sum : '?'}
+            </span>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -608,6 +297,7 @@ function MentalMathFlashcard() {
         <button
           type="button"
           onClick={() => setShowAnswer(!showAnswer)}
+          disabled={numbers.length === 0}
           className="flex-1 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold transition cursor-pointer"
         >
           {showAnswer ? 'Hide Answer' : 'Reveal Answer'}
@@ -624,8 +314,7 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
   const [useIframeFallback, setUseIframeFallback] = useState(false);
 
   const sanitizedRoom = useMemo(() => {
-    const clean = (roomCode || 'EvolveKids-Classroom').replace(/[^a-zA-Z0-9_-]/g, '');
-    return clean || 'EvolveKids-Classroom';
+    return (roomCode || '').replace(/[^a-zA-Z0-9_-]/g, '');
   }, [roomCode]);
 
   const jitsiUrl = `https://meet.jit.si/${sanitizedRoom}`;
@@ -635,12 +324,11 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
       if (apiRef.current) {
         try {
           apiRef.current.dispose();
-        } catch (_err) {
+        } catch {
           // ignore cleanup errors
         }
         apiRef.current = null;
       }
-      setUseIframeFallback(false);
       return;
     }
 
@@ -661,7 +349,7 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
           width: '100%',
           height: 400,
           userInfo: {
-            displayName: displayName || 'Evolve Kids Member'
+            displayName: displayName || ''
           },
           configOverwrite: {
             prejoinPageEnabled: false,
@@ -674,7 +362,7 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
         });
         apiRef.current = api;
         setUseIframeFallback(false);
-      } catch (_err) {
+      } catch {
         setUseIframeFallback(true);
       }
     };
@@ -701,7 +389,7 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
       if (apiRef.current) {
         try {
           apiRef.current.dispose();
-        } catch (_err) {
+        } catch {
           // ignore cleanup errors
         }
         apiRef.current = null;
@@ -780,7 +468,7 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
         <iframe
           title={`Jitsi Classroom ${sanitizedRoom}`}
           src={`${jitsiUrl}#config.prejoinPageEnabled=false&userInfo.displayName="${encodeURIComponent(
-            displayName || 'Evolve Kids Member'
+            displayName || ''
           )}"`}
           allow="camera; microphone; fullscreen; display-capture; autoplay"
           className="w-full h-[400px] border-0 bg-slate-950"
@@ -793,7 +481,7 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
 }
 
 // --- AUTHENTICATION SCREEN (SUPABASE LOGIN / SIGN UP + DEMO MODE) ---
-function AuthGateScreen({ onEnterDemoRole, authError, authLoading, onSignIn, onSignUp }) {
+function AuthGateScreen({ authError, authLoading, onSignIn, onSignUp }) {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -875,7 +563,7 @@ function AuthGateScreen({ onEnterDemoRole, authError, authLoading, onSignIn, onS
                 required
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g., Ranjitha Ganesh or Aarav Sharma"
+                placeholder="Your full name"
                 className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
               />
             </div>
@@ -914,38 +602,6 @@ function AuthGateScreen({ onEnterDemoRole, authError, authLoading, onSignIn, onS
           </button>
         </form>
 
-        {/* Instant Preview / Demo Mode Role Switcher */}
-        <div className="mt-6 pt-5 border-t border-slate-200">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Preview / Demo Mode (Test Roles Instantly)
-            </span>
-            <ShieldCheck className="w-4 h-4 text-teal-600" />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => onEnterDemoRole('admin')}
-              className="py-2 px-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-bold transition cursor-pointer"
-            >
-              Admin View
-            </button>
-            <button
-              type="button"
-              onClick={() => onEnterDemoRole('staff')}
-              className="py-2 px-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition cursor-pointer"
-            >
-              Staff View
-            </button>
-            <button
-              type="button"
-              onClick={() => onEnterDemoRole('student')}
-              className="py-2 px-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition cursor-pointer"
-            >
-              Student View
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -956,7 +612,6 @@ export default function App() {
   // Auth & Role State ('admin' | 'staff' | 'student')
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [demoRole, setDemoRole] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [profilesList, setProfilesList] = useState([]);
@@ -969,26 +624,21 @@ export default function App() {
   const [isUsingLiveDb, setIsUsingLiveDb] = useState(false);
 
   // Core Academy Data State
-  const [staff, setStaff] = useState(INITIAL_STAFF);
-  const [students, setStudents] = useState(INITIAL_STUDENTS);
-  const [batches, setBatches] = useState(INITIAL_BATCHES);
-  const [callLogs, setCallLogs] = useState(INITIAL_CALL_LOGS);
+  const [staff, setStaff] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [callLogs, setCallLogs] = useState([]);
   const [adminCallRoleFilter, setAdminCallRoleFilter] = useState('All');
 
   // Classroom & Jitsi State
-  const [activeBatchId, setActiveBatchId] = useState('b-1');
+  const [activeBatchId, setActiveBatchId] = useState('');
   const [jitsiJoined, setJitsiJoined] = useState(false);
   const [callStartedAt, setCallStartedAt] = useState(null);
   const [callElapsedSeconds, setCallElapsedSeconds] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [screenSharing, setScreenSharing] = useState(false);
-  const [raisedHands, setRaisedHands] = useState({ 'stu-102': true });
-  const [chatMessages, setChatMessages] = useState([
-    { id: 1, sender: 'Ranjitha Ganesh (Trainer)', time: '05:02 PM', text: 'Welcome everyone! Keep your Soroban clear and ready.' },
-    { id: 2, sender: 'Aarav Sharma', time: '05:03 PM', text: 'Ready Ma’am! My abacus is set to 0.' },
-    { id: 3, sender: 'Diya Nair', time: '05:04 PM', text: 'Ma’am, can we do small friends +4 formula next?' }
-  ]);
+  const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
 
   // Filters & Modals
@@ -998,190 +648,204 @@ export default function App() {
   const [feeFilter, setFeeFilter] = useState('All');
 
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
-  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
 
   // Attendance Tab State
-  const [attendanceBatchId, setAttendanceBatchId] = useState('b-1');
-  const [sessionDate, setSessionDate] = useState('2026-11-24');
-  const [todayAttendance, setTodayAttendance] = useState({
-    'stu-101': 'Present',
-    'stu-102': 'Present',
-    'stu-107': 'Late',
-    'stu-103': 'Present',
-    'stu-106': 'Present',
-    'stu-104': 'Present',
-    'stu-108': 'Absent',
-    'stu-105': 'Present'
+  const [attendanceBatchId, setAttendanceBatchId] = useState('');
+  const [sessionDate, setSessionDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
+  const [todayAttendance, setTodayAttendance] = useState({});
+  const [attendanceReady, setAttendanceReady] = useState(false);
 
   // New Student Form State
   const [newStudent, setNewStudent] = useState({
     name: '',
     userId: '',
-    age: 8,
-    level: 'Level 1',
-    trainerId: 'st-2',
-    batchId: 'b-2',
-    monthlyFee: 1500,
+    level: '',
+    trainerId: '',
+    batchId: '',
+    monthlyFee: '',
     parentPhone: ''
   });
 
-  // New Staff Form State
-  const [newStaff, setNewStaff] = useState({
-    name: '',
-    role: 'Abacus Trainer',
-    specialties: 'Level 1–4, Junior Foundation',
-    email: '',
-    phone: '',
-    sharePercent: 50
-  });
-
-  const triggerToast = (message) => {
+  const triggerToast = useCallback((message) => {
     setToast(message);
     setTimeout(() => setToast(null), 3200);
-  };
+  }, []);
 
   // Effective Role ('admin' | 'staff' | 'student')
   const currentRole = useMemo(() => {
-    if (profile?.role) return profile.role;
-    if (demoRole) return demoRole;
-    return 'student';
-  }, [profile, demoRole]);
+    return normalizeRole(profile?.role);
+  }, [profile]);
 
   const currentUserName = useMemo(() => {
     if (profile?.full_name) return profile.full_name;
     if (session?.user?.email) return session.user.email.split('@')[0];
-    if (demoRole === 'admin') return 'Ranjitha Ganesh (Demo Admin)';
-    if (demoRole === 'staff') return 'Priya Subramanian (Demo Staff)';
-    if (demoRole === 'student') return 'Aarav Sharma (Demo Student)';
     return 'Evolve Kids User';
-  }, [profile, session, demoRole]);
+  }, [profile, session]);
 
   // Fetch user profile from public.profiles
-  const fetchUserProfile = async (userId, userEmail) => {
+  const fetchUserProfile = useCallback(async (userId, userEmail, claimRole) => {
     if (!supabase) return null;
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role')
-        .eq('id', userId)
-        .single();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, role')
+      .eq('id', userId)
+      .maybeSingle();
 
-      if (error || !data) {
-        return { id: userId, email: userEmail, full_name: userEmail?.split('@')[0] || 'User', role: 'student' };
-      }
-      return data;
-    } catch (_err) {
-      return { id: userId, email: userEmail, full_name: userEmail?.split('@')[0] || 'User', role: 'student' };
-    }
-  };
+    if (error && !normalizeRole(claimRole)) throw error;
+    return {
+      ...data,
+      id: userId,
+      email: data?.email || userEmail,
+      full_name: data?.full_name || userEmail?.split('@')[0] || '',
+      role: normalizeRole(data?.role) || normalizeRole(claimRole)
+    };
+  }, []);
 
-  // Load live Supabase tables when authenticated (falls back gracefully to demo arrays)
-  const loadAcademyData = async (roleToFetch) => {
+  // Load only persisted academy data; empty tables stay empty rather than showing sample records.
+  const loadAcademyData = useCallback(async (roleToFetch, activeProfile, activeUserId) => {
     if (!supabase) {
       setIsUsingLiveDb(false);
       return;
     }
     setDataLoading(true);
+    setIsUsingLiveDb(false);
+    setProfilesList([]);
+    setStaff([]);
+    setStudents([]);
+    setBatches([]);
+    setCallLogs([]);
+    setTodayAttendance({});
+    setAttendanceReady(false);
     try {
-      const [batchesRes, studentsRes, profilesRes, callLogsRes] = await Promise.all([
-        supabase.from('batches').select('*').order('created_at', { ascending: true }),
-        supabase.from('students').select('*').order('created_at', { ascending: false }),
-        roleToFetch === 'admin' || roleToFetch === 'staff'
+      const userId = activeUserId;
+      if (!userId) throw new Error('An authenticated user is required to load dashboard data.');
+
+      const studentFields = roleToFetch === 'staff'
+        ? 'id, user_id, full_name, abacus_level, trainer_id, batch_id, sessions_completed'
+        : '*';
+      let studentsQuery = supabase.from('students').select(studentFields).order('created_at', { ascending: false });
+      if (roleToFetch === 'staff') studentsQuery = studentsQuery.eq('trainer_id', userId);
+      if (roleToFetch === 'student') studentsQuery = studentsQuery.eq('user_id', userId);
+
+      const [studentsRes, adminProfilesRes, callLogsRes] = await Promise.all([
+        studentsQuery,
+        roleToFetch === 'admin'
           ? supabase.from('profiles').select('id, email, full_name, role').order('created_at', { ascending: true })
           : Promise.resolve({ data: null, error: null }),
-        supabase.from('class_sessions').select('*').order('created_at', { ascending: false })
+        (roleToFetch === 'admin'
+          ? supabase.from('class_sessions').select('*')
+          : supabase.from('class_sessions').select('*').eq('user_id', userId)
+        ).order('created_at', { ascending: false })
       ]);
 
-      let liveLoaded = false;
+      const loadedStudents = studentsRes.data || [];
+      const batchIds = [...new Set(loadedStudents.map((student) => student.batch_id).filter(Boolean))];
+      const trainerIds = [...new Set(loadedStudents.map((student) => student.trainer_id).filter(Boolean))];
+      const profilesRes = roleToFetch === 'admin'
+        ? adminProfilesRes
+        : roleToFetch === 'student' && trainerIds.length
+        ? await supabase.from('profiles').select('id, email, full_name, role').in('id', trainerIds)
+        : { data: [], error: null };
+      let batchesQuery = supabase.from('batches').select('*').order('created_at', { ascending: true });
+      if (roleToFetch === 'staff') batchesQuery = batchesQuery.eq('trainer_id', userId);
+      if (roleToFetch === 'student') {
+        batchesQuery = batchIds.length ? batchesQuery.in('id', batchIds) : null;
+      }
+      const batchesRes = batchesQuery
+        ? await batchesQuery
+        : { data: [], error: null };
 
-      if (!batchesRes.error && batchesRes.data && batchesRes.data.length > 0) {
-        liveLoaded = true;
-        setBatches(
-          batchesRes.data.map((b, idx) => ({
-            id: b.id,
-            name: b.name,
-            days: b.schedule_days,
-            time: b.schedule_time,
-            level: b.level,
-            trainerId: b.trainer_id || 'st-1',
-            status: idx === 0 ? 'Live Now' : 'Scheduled',
-            roomCode: b.room_code
+      const results = [batchesRes, studentsRes, callLogsRes];
+      if (roleToFetch === 'admin') results.push(profilesRes);
+      const failedResult = results.find((result) => result.error);
+      if (failedResult) throw failedResult.error;
+      if (roleToFetch === 'student' && profilesRes.error) {
+        triggerToast(`Unable to load trainer details: ${profilesRes.error.message}`);
+      }
+
+      const loadedBatches = batchesRes.data || [];
+      const loadedCallLogs = callLogsRes.data || [];
+
+      setBatches(
+        loadedBatches.map((batch) => ({
+          id: batch.id,
+          name: batch.name,
+          days: batch.schedule_days,
+          time: batch.schedule_time,
+          level: batch.level,
+          trainerId: batch.trainer_id,
+          status: batch.status || '',
+          roomCode: batch.room_code
+        }))
+      );
+      setActiveBatchId(loadedBatches[0]?.id || '');
+      setAttendanceBatchId(loadedBatches[0]?.id || '');
+      setTodayAttendance({});
+      setStudents(
+        loadedStudents.map((student) => ({
+          id: student.id,
+          userId: student.user_id || null,
+          name: student.full_name || '',
+          age: student.age ?? null,
+          level: student.abacus_level || '',
+          trainerId: student.trainer_id || null,
+          batchId: student.batch_id || null,
+          sessionsCompleted: student.sessions_completed ?? 0,
+          totalCycleSessions: student.total_cycle_sessions ?? null,
+          attendanceRate: student.attendance_rate ?? null,
+          monthlyFee: student.monthly_fee == null ? null : Number(student.monthly_fee),
+          feeStatus: student.fee_status || '',
+          paymentMode: student.payment_mode || '',
+          lastPaidDate: student.last_paid_date || '',
+          parentPhone: student.parent_phone || ''
+        }))
+      );
+      const loadedProfiles = profilesRes.data || [];
+      setProfilesList(roleToFetch === 'admin' ? loadedProfiles : []);
+      setStaff(
+        (roleToFetch === 'admin'
+          ? loadedProfiles
+          : roleToFetch === 'staff' && activeProfile
+          ? [activeProfile]
+          : loadedProfiles)
+          .filter((userProfile) => ['staff', 'admin'].includes(normalizeRole(userProfile.role)))
+          .map((userProfile) => ({
+            id: userProfile.id,
+            name: userProfile.full_name || userProfile.email || '',
+            role: normalizeRole(userProfile.role),
+            specialties: [],
+            email: userProfile.email || '',
+            activeBatches: loadedBatches.filter((batch) => batch.trainer_id === userProfile.id).length,
+            avatarColor: 'bg-indigo-600'
           }))
-        );
-      }
+      );
+      setCallLogs(
+        loadedCallLogs.map((call) => ({
+          id: call.id,
+          userId: call.user_id || null,
+          participantName: call.participant_name || '',
+          participantRole: normalizeRole(call.participant_role),
+          batchId: call.batch_id || null,
+          batchName: call.batch_name || '',
+          roomCode: call.room_code || '',
+          sessionDate: call.session_date || '',
+          startedAt: call.started_at || '',
+          endedAt: call.ended_at || '',
+          durationSeconds: Number(call.duration_seconds) || 0
+        }))
+      );
 
-      if (!studentsRes.error && studentsRes.data && studentsRes.data.length > 0) {
-        liveLoaded = true;
-        setStudents(
-          studentsRes.data.map((s) => ({
-            id: s.id,
-            userId: s.user_id || null,
-            name: s.full_name,
-            age: 8,
-            level: s.abacus_level || 'Level 1',
-            trainerId: s.trainer_id || 'st-1',
-            batchId: s.batch_id || 'b-1',
-            sessionsCompleted: s.sessions_completed ?? 0,
-            totalCycleSessions: 8,
-            attendanceRate: 95,
-            monthlyFee: Number(s.monthly_fee) || 1500,
-            feeStatus: s.fee_status || 'Pending',
-            paymentMode: 'UPI',
-            lastPaidDate: '24 Nov 2026',
-            parentPhone: s.parent_phone || '+91 98400 00000'
-          }))
-        );
-      }
-
-      if (!profilesRes.error && profilesRes.data && profilesRes.data.length > 0) {
-        setProfilesList(profilesRes.data);
-        const staffProfiles = profilesRes.data.filter((p) => p.role === 'staff' || p.role === 'admin');
-        if (staffProfiles.length > 0) {
-          const palette = ['bg-indigo-600', 'bg-teal-600', 'bg-violet-600', 'bg-amber-600'];
-          setStaff(
-            staffProfiles.map((sp, i) => ({
-              id: sp.id,
-              name: sp.full_name || sp.email,
-              role: sp.role === 'admin' ? 'Founder & Admin' : 'Abacus Trainer',
-              specialties: ['Level 1–6', 'Mental Math'],
-              email: sp.email,
-              phone: '+91 98400 00000',
-              activeBatches: 2,
-              classesThisWeek: 6,
-              sharePercent: sp.role === 'admin' ? 100 : 50,
-              status: 'Available',
-              avatarColor: palette[i % palette.length]
-            }))
-          );
-        }
-      }
-
-      if (!callLogsRes.error && callLogsRes.data && callLogsRes.data.length > 0) {
-        setCallLogs(
-          callLogsRes.data.map((c) => ({
-            id: c.id,
-            userId: c.user_id || null,
-            participantName: c.participant_name || 'Member',
-            participantRole: c.participant_role || 'student',
-            batchId: c.batch_id || 'b-1',
-            batchName: c.batch_name || 'Abacus Live Class',
-            roomCode: c.room_code || 'EvolveKids-Classroom',
-            sessionDate: c.session_date || '24 Nov 2026',
-            startedAt: c.started_at || '05:00 PM',
-            endedAt: c.ended_at || '05:50 PM',
-            durationSeconds: Number(c.duration_seconds) || 0
-          }))
-        );
-      }
-
-      setIsUsingLiveDb(liveLoaded);
-    } catch (_err) {
+      setIsUsingLiveDb(true);
+    } catch (error) {
       setIsUsingLiveDb(false);
+      triggerToast(`Unable to load dashboard data: ${error.message}`);
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [triggerToast]);
 
   // Initialize Supabase Auth listener
   useEffect(() => {
@@ -1199,14 +863,19 @@ export default function App() {
         setSession(currentSession);
 
         if (currentSession?.user) {
-          const prof = await fetchUserProfile(currentSession.user.id, currentSession.user.email);
+          const prof = await fetchUserProfile(
+            currentSession.user.id,
+            currentSession.user.email,
+            currentSession.user.app_metadata?.role
+          );
           if (mounted) {
             setProfile(prof);
-            await loadAcademyData(prof?.role || 'student');
+            if (prof?.role) await loadAcademyData(prof.role, prof, currentSession.user.id);
+            else setAuthError('Your account does not have an assigned admin, staff, or student role. Contact an administrator.');
           }
         }
-      } catch (_err) {
-        // Keep demo gate available if offline or env missing
+      } catch (error) {
+        if (mounted) setAuthError(`Unable to load your account: ${error.message}`);
       } finally {
         if (mounted) setAuthLoading(false);
       }
@@ -1220,11 +889,19 @@ export default function App() {
       if (!mounted) return;
       setSession(nextSession);
       if (nextSession?.user) {
-        setDemoRole(null);
-        const prof = await fetchUserProfile(nextSession.user.id, nextSession.user.email);
-        if (mounted) {
-          setProfile(prof);
-          await loadAcademyData(prof?.role || 'student');
+        try {
+          const prof = await fetchUserProfile(
+            nextSession.user.id,
+            nextSession.user.email,
+            nextSession.user.app_metadata?.role
+          );
+          if (mounted) {
+            setProfile(prof);
+            if (prof?.role) await loadAcademyData(prof.role, prof, nextSession.user.id);
+            else setAuthError('Your account does not have an assigned admin, staff, or student role. Contact an administrator.');
+          }
+        } catch (error) {
+          if (mounted) setAuthError(`Unable to load your account: ${error.message}`);
         }
       } else {
         setProfile(null);
@@ -1235,25 +912,38 @@ export default function App() {
       mounted = false;
       authListener?.subscription?.unsubscribe?.();
     };
-  }, []);
+  }, [fetchUserProfile, loadAcademyData]);
 
-  // Ensure active tab is valid for current role
   useEffect(() => {
-    if (currentRole === 'student' && !['overview', 'classroom', 'attendance', 'payments'].includes(activeTab)) {
-      setActiveTab('overview');
-    } else if (currentRole === 'staff' && activeTab === 'payments') {
-      setActiveTab('overview');
-    }
-  }, [currentRole, activeTab]);
+    if (!supabase || !session?.user?.id || !isUsingLiveDb || !attendanceBatchId || currentRole === 'student') return undefined;
+    let active = true;
+
+    const loadAttendance = async () => {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('student_id, status')
+        .eq('batch_id', attendanceBatchId)
+        .eq('session_date', sessionDate);
+      if (!active) return;
+      if (error) {
+        triggerToast(`Unable to load attendance: ${error.message}`);
+        return;
+      }
+      setTodayAttendance(Object.fromEntries((data || []).map((record) => [record.student_id, record.status])));
+      setAttendanceReady(true);
+    };
+
+    loadAttendance();
+    return () => {
+      active = false;
+    };
+  }, [attendanceBatchId, currentRole, isUsingLiveDb, session, sessionDate, triggerToast]);
 
   // Live Call Timer Effect
   useEffect(() => {
-    if (!jitsiJoined || !callStartedAt) {
-      setCallElapsedSeconds(0);
-      return;
-    }
+    if (!jitsiJoined || !callStartedAt) return undefined;
     const interval = setInterval(() => {
-      setCallElapsedSeconds(Math.max(1, Math.floor((Date.now() - callStartedAt) / 1000)));
+      setCallElapsedSeconds(Math.max(1, Math.floor((getCurrentTimestamp() - callStartedAt) / 1000)));
     }, 1000);
     return () => clearInterval(interval);
   }, [jitsiJoined, callStartedAt]);
@@ -1262,7 +952,7 @@ export default function App() {
   const handleSignIn = async (email, password) => {
     setAuthError('');
     if (!supabase) {
-      setAuthError('Supabase is not configured yet. Use a Demo View button below or add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      setAuthError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to sign in.');
       return;
     }
     setAuthLoading(true);
@@ -1271,10 +961,14 @@ export default function App() {
       if (error) {
         setAuthError(error.message);
       } else if (data?.user) {
-        const prof = await fetchUserProfile(data.user.id, data.user.email);
+        const prof = await fetchUserProfile(data.user.id, data.user.email, data.user.app_metadata?.role);
         setProfile(prof);
-        await loadAcademyData(prof?.role || 'student');
-        triggerToast(`Signed in as ${prof?.role || 'student'}`);
+        if (!prof?.role) {
+          setAuthError('Your account does not have an assigned admin, staff, or student role. Contact an administrator.');
+        } else {
+          await loadAcademyData(prof.role, prof, data.user.id);
+          triggerToast(`Signed in as ${prof.role}`);
+        }
       }
     } catch (err) {
       setAuthError(err.message || 'Unable to sign in');
@@ -1286,7 +980,7 @@ export default function App() {
   const handleSignUp = async (email, password, fullName) => {
     setAuthError('');
     if (!supabase) {
-      setAuthError('Supabase is not configured yet. Use a Demo View button below.');
+      setAuthError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to create an account.');
       return false;
     }
     setAuthLoading(true);
@@ -1318,58 +1012,57 @@ export default function App() {
     }
     setSession(null);
     setProfile(null);
-    setDemoRole(null);
-    setActiveTab('overview');
-  };
-
-  const handleEnterDemoRole = (role) => {
     setAuthError('');
-    setDemoRole(role);
     setActiveTab('overview');
-    triggerToast(`Opened ${role.toUpperCase()} preview mode`);
   };
 
   // Role promotion in public.profiles (Admin only)
   const handleUpdateUserRole = async (userId, nextRole) => {
-    if (currentRole !== 'admin') return;
-    setProfilesList((prev) => prev.map((p) => (p.id === userId ? { ...p, role: nextRole } : p)));
-    if (supabase && session) {
-      const { error } = await supabase.from('profiles').update({ role: nextRole }).eq('id', userId);
-      if (error) {
-        triggerToast(`Role update note: ${error.message}`);
-        return;
-      }
+    const role = normalizeRole(nextRole);
+    if (currentRole !== 'admin' || userId === session?.user?.id || !role || !supabase) return;
+    const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
+    if (error) {
+      triggerToast(`Unable to update account role: ${error.message}`);
+      return;
     }
-    triggerToast(`Updated user role to ${nextRole}`);
+    setProfilesList((prev) => prev.map((p) => (p.id === userId ? { ...p, role } : p)));
+    triggerToast(`Updated user role to ${role}`);
   };
 
   // Students visible to current role
   const roleStudents = useMemo(() => {
-    if (currentRole === 'student') {
-      if (session?.user?.id) {
-        const matched = students.filter((s) => s.userId === session.user.id);
-        if (matched.length > 0) return matched;
-      }
-      return [students[0]].filter(Boolean);
-    }
-    return students;
+    if (!session?.user?.id) return [];
+    if (currentRole === 'admin') return students;
+    if (currentRole === 'staff') return students.filter((student) => student.trainerId === session.user.id);
+    if (currentRole === 'student') return students.filter((student) => student.userId === session.user.id);
+    return [];
   }, [currentRole, session, students]);
 
   // Derived Metrics
   const stats = useMemo(() => {
     const totalStudents = roleStudents.length;
-    const activeTrainers = staff.length;
+    const activeTrainers = staff.filter((member) => normalizeRole(member.role) === 'staff').length;
     const collectedRevenue = roleStudents
       .filter((s) => s.feeStatus === 'Paid')
-      .reduce((acc, s) => acc + s.monthlyFee, 0);
+      .reduce((acc, s) => acc + (Number(s.monthlyFee) || 0), 0);
     const pendingRevenue = roleStudents
       .filter((s) => s.feeStatus !== 'Paid')
-      .reduce((acc, s) => acc + s.monthlyFee, 0);
-    const avgAttendance = Math.round(
-      roleStudents.reduce((acc, s) => acc + s.attendanceRate, 0) / (roleStudents.length || 1)
+      .reduce((acc, s) => acc + (Number(s.monthlyFee) || 0), 0);
+    const attendanceRecords = roleStudents.filter(
+      (student) => student.attendanceRate != null && Number.isFinite(Number(student.attendanceRate))
     );
+    const avgAttendance = attendanceRecords.length
+      ? Math.round(attendanceRecords.reduce((acc, student) => acc + Number(student.attendanceRate), 0) / attendanceRecords.length)
+      : null;
     return { totalStudents, activeTrainers, collectedRevenue, pendingRevenue, avgAttendance };
   }, [roleStudents, staff]);
+
+  const roleBatches = useMemo(() => {
+    if (currentRole === 'admin') return batches;
+    if (currentRole === 'staff') return batches.filter((batch) => batch.trainerId === session?.user?.id);
+    const studentBatchIds = new Set(roleStudents.map((student) => student.batchId).filter(Boolean));
+    return batches.filter((batch) => studentBatchIds.has(batch.id));
+  }, [batches, currentRole, roleStudents, session]);
 
   // Filtered Students
   const filteredStudents = useMemo(() => {
@@ -1394,21 +1087,8 @@ export default function App() {
       return callLogs.filter((log) => log.participantRole === adminCallRoleFilter.toLowerCase());
     }
 
-    const cleanUser = currentUserName.replace(/\s*\(Demo.*\)$/i, '').trim().toLowerCase();
-    const emailPrefix = (session?.user?.email || '').split('@')[0].trim().toLowerCase();
-
-    return callLogs.filter((log) => {
-      if (session?.user?.id && log.userId) {
-        return log.userId === session.user.id;
-      }
-      const logName = (log.participantName || '').trim().toLowerCase();
-      if (log.participantRole !== currentRole) return false;
-      if (cleanUser && logName === cleanUser) return true;
-      if (emailPrefix && logName === emailPrefix) return true;
-      const firstToken = cleanUser.split(' ')[0];
-      return Boolean(firstToken && logName.includes(firstToken));
-    });
-  }, [callLogs, currentRole, adminCallRoleFilter, session, currentUserName]);
+    return callLogs.filter((log) => log.userId && log.userId === session?.user?.id);
+  }, [callLogs, currentRole, adminCallRoleFilter, session]);
 
   const totalCallSeconds = useMemo(
     () => visibleCallLogs.reduce((acc, log) => acc + (Number(log.durationSeconds) || 0), 0),
@@ -1437,10 +1117,14 @@ export default function App() {
 
   // Start / Stop & Log Video Call Duration
   const startVideoCallSession = (batchIdToJoin) => {
-    const targetBatchId = batchIdToJoin || activeBatchId;
+    const targetBatchId = batchIdToJoin || activeBatchId || currentLiveBatch?.id;
+    if (!targetBatchId || !roleBatches.some((batch) => batch.id === targetBatchId)) {
+      triggerToast('No class is assigned to your account.');
+      return;
+    }
     setActiveBatchId(targetBatchId);
     if (!jitsiJoined) {
-      setCallStartedAt(Date.now());
+      setCallStartedAt(getCurrentTimestamp());
       setCallElapsedSeconds(0);
       setJitsiJoined(true);
     }
@@ -1448,19 +1132,24 @@ export default function App() {
 
   const finishAndLogVideoCall = async () => {
     if (!jitsiJoined) return;
-    const endTimeMs = Date.now();
+    const endTimeMs = getCurrentTimestamp();
     const startTimeMs = callStartedAt || endTimeMs;
     const durationSecs = Math.max(1, Math.round((endTimeMs - startTimeMs) / 1000));
-    const batch = batches.find((b) => b.id === activeBatchId) || batches[0];
+    const batch = roleBatches.find((item) => item.id === activeBatchId) || currentLiveBatch;
+    if (!batch) {
+      setJitsiJoined(false);
+      setCallStartedAt(null);
+      return;
+    }
 
     const newLog = {
-      id: `call-${Date.now()}`,
+      id: `call-${endTimeMs}`,
       userId: session?.user?.id || null,
-      participantName: currentUserName.replace(/\s*\(Demo.*\)$/i, '').trim(),
+      participantName: currentUserName,
       participantRole: currentRole,
-      batchId: batch?.id || 'b-1',
-      batchName: batch?.name || 'Abacus Live Class',
-      roomCode: batch?.roomCode || 'EvolveKids-Classroom',
+      batchId: batch.id,
+      batchName: batch.name,
+      roomCode: batch.roomCode || '',
       sessionDate: new Date(endTimeMs).toLocaleDateString('en-GB', {
         day: '2-digit',
         month: 'short',
@@ -1471,22 +1160,16 @@ export default function App() {
       durationSeconds: durationSecs
     };
 
-    setCallLogs((prev) => [newLog, ...prev]);
     setJitsiJoined(false);
     setCallStartedAt(null);
     setCallElapsedSeconds(0);
 
     if (supabase && session) {
-      try {
-        const isUuid = (val) =>
-          typeof val === 'string' &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
-
-        await supabase.from('class_sessions').insert({
+      const { error } = await supabase.from('class_sessions').insert({
           user_id: session.user.id,
           participant_name: newLog.participantName,
           participant_role: currentRole,
-          batch_id: isUuid(newLog.batchId) ? newLog.batchId : null,
+          batch_id: newLog.batchId,
           batch_name: newLog.batchName,
           room_code: newLog.roomCode,
           session_date: newLog.sessionDate,
@@ -1494,8 +1177,10 @@ export default function App() {
           ended_at: newLog.endedAt,
           duration_seconds: durationSecs
         });
-      } catch (_err) {
-        // Keep local state log if table hasn't been created yet
+      if (error) {
+        triggerToast(`Unable to save classroom session: ${error.message}`);
+      } else {
+        setCallLogs((prev) => [newLog, ...prev]);
       }
     }
 
@@ -1504,10 +1189,18 @@ export default function App() {
 
   // Handlers
   const handleJoinClassroom = (batchId) => {
+    const batch = roleBatches.find((item) => item.id === batchId);
+    if (!batch) {
+      triggerToast('This class is not assigned to your account.');
+      return;
+    }
+    if (!batch.roomCode) {
+      triggerToast('This class does not have a video room configured yet.');
+      return;
+    }
     startVideoCallSession(batchId);
     setActiveTab('classroom');
-    const batch = batches.find((b) => b.id === batchId);
-    triggerToast(`Joined Live Video Classroom: ${batch?.name || 'Abacus Batch'}`);
+    triggerToast(`Joined Live Video Classroom: ${batch.name}`);
   };
 
   const handleSendChat = (e) => {
@@ -1516,7 +1209,7 @@ export default function App() {
     setChatMessages((prev) => [
       ...prev,
       {
-        id: Date.now(),
+        id: getCurrentTimestamp(),
         sender: currentUserName,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         text: chatInput.trim()
@@ -1525,187 +1218,181 @@ export default function App() {
     setChatInput('');
   };
 
-  const handleMarkAttendance = async (studentId, status) => {
-    if (currentRole === 'student') return;
-    const prevStatus = todayAttendance[studentId];
-    setTodayAttendance((prev) => ({ ...prev, [studentId]: status }));
-
-    let nextSessionCount = 0;
-    setStudents((prev) =>
-      prev.map((s) => {
-        if (s.id !== studentId) return s;
-        let delta = 0;
-        if (prevStatus !== 'Present' && prevStatus !== 'Late' && (status === 'Present' || status === 'Late')) {
-          delta = 1;
-        } else if ((prevStatus === 'Present' || prevStatus === 'Late') && status === 'Absent') {
-          delta = -1;
-        }
-        const nextSessions = Math.min(s.totalCycleSessions, Math.max(0, s.sessionsCompleted + delta));
-        nextSessionCount = nextSessions;
-        const nextRate = status === 'Absent' ? Math.max(70, s.attendanceRate - 2) : Math.min(100, s.attendanceRate + 1);
-        return { ...s, sessionsCompleted: nextSessions, attendanceRate: nextRate };
-      })
-    );
-
-    if (supabase && session && isUsingLiveDb) {
-      try {
-        await supabase.from('attendance').upsert(
-          {
-            student_id: studentId,
-            batch_id: attendanceBatchId,
-            session_date: sessionDate,
-            status: status === 'Absent' ? 'Absent' : 'Present',
-            marked_by: session.user.id
-          },
-          { onConflict: 'student_id,batch_id,session_date' }
-        );
-        await supabase.from('students').update({ sessions_completed: nextSessionCount }).eq('id', studentId);
-      } catch (_err) {
-        // Keep optimistic UI update
-      }
+  const handleMarkAttendance = async (studentId, status, targetBatchId = attendanceBatchId) => {
+    if (!['admin', 'staff'].includes(currentRole) || !roleStudents.some((student) => student.id === studentId)) return;
+    if (!roleBatches.some((batch) => batch.id === targetBatchId)) {
+      triggerToast('This class is not assigned to your account.');
+      return;
+    }
+    if (!attendanceReady) {
+      triggerToast('Attendance data is still loading.');
+      return;
+    }
+    if (!supabase || !session) {
+      triggerToast('Attendance requires a connected account.');
+      return;
     }
 
+    const targetStudent = roleStudents.find((student) => student.id === studentId);
+    const previousStatus = todayAttendance[studentId];
+    const previouslyAttended = ['Present', 'Late'].includes(previousStatus);
+    const currentlyAttended = ['Present', 'Late'].includes(status);
+    const sessionDelta = Number(currentlyAttended) - Number(previouslyAttended);
+    const nextSessionCount = Math.max(0, targetStudent.sessionsCompleted + sessionDelta);
+
+    const { error } = await supabase.from('attendance').upsert(
+      {
+        student_id: studentId,
+        batch_id: targetBatchId,
+        session_date: sessionDate,
+        status: status === 'Absent' ? 'Absent' : 'Present',
+        marked_by: session.user.id
+      },
+      { onConflict: 'student_id,batch_id,session_date' }
+    );
+    if (error) {
+      triggerToast(`Unable to save attendance: ${error.message}`);
+      return;
+    }
+
+    setTodayAttendance((prev) => ({ ...prev, [studentId]: status }));
+    if (sessionDelta !== 0) {
+      const { error: progressError } = await supabase
+        .from('students')
+        .update({ sessions_completed: nextSessionCount })
+        .eq('id', studentId);
+      if (progressError) {
+        triggerToast(`Attendance saved, but session progress could not be updated: ${progressError.message}`);
+        return;
+      }
+      setStudents((prev) =>
+        prev.map((student) => (student.id === studentId ? { ...student, sessionsCompleted: nextSessionCount } : student))
+      );
+    }
     triggerToast(`Attendance marked as ${status}`);
   };
 
   const handleRecordPayment = async (studentId) => {
     if (currentRole !== 'admin') return;
     const target = students.find((s) => s.id === studentId);
-    setStudents((prev) =>
-      prev.map((s) =>
-        s.id === studentId
-          ? {
-              ...s,
-              feeStatus: 'Paid',
-              paymentMode: 'UPI',
-              lastPaidDate: '24 Nov 2026',
-              sessionsCompleted: s.sessionsCompleted === 8 ? 0 : s.sessionsCompleted
-            }
-          : s
-      )
-    );
-
-    if (supabase && session && isUsingLiveDb && target) {
-      try {
-        await supabase.from('students').update({ fee_status: 'Paid' }).eq('id', studentId);
-        await supabase.from('payments').insert({
-          student_id: studentId,
-          trainer_id: target.trainerId,
-          amount: target.monthlyFee,
-          status: 'Paid',
-          paid_date: '2026-11-24'
-        });
-      } catch (_err) {
-        // Keep UI update
-      }
+    if (!target || target.monthlyFee == null || !supabase || !session || !isUsingLiveDb) {
+      triggerToast('A saved student with a monthly fee is required to record a payment.');
+      return;
     }
 
-    triggerToast('Payment recorded & new 8-session cycle updated!');
+    const paidDate = new Date().toISOString().slice(0, 10);
+    const { error: studentError } = await supabase
+      .from('students')
+      .update({ fee_status: 'Paid' })
+      .eq('id', studentId);
+    if (studentError) {
+      triggerToast(`Unable to update student fee status: ${studentError.message}`);
+      return;
+    }
+
+    const { error: paymentError } = await supabase.from('payments').insert({
+      student_id: studentId,
+      trainer_id: target.trainerId,
+      amount: target.monthlyFee,
+      status: 'Paid',
+      paid_date: paidDate
+    });
+    setStudents((prev) =>
+      prev.map((student) => (student.id === studentId ? { ...student, feeStatus: 'Paid' } : student))
+    );
+    if (paymentError) {
+      triggerToast(`Fee status updated, but payment history could not be saved: ${paymentError.message}`);
+      return;
+    }
+    triggerToast('Payment recorded.');
   };
 
   const handleAddStudentSubmit = async (e) => {
     e.preventDefault();
-    if (!newStudent.name.trim() || currentRole === 'student') return;
+    if (!newStudent.name.trim() || currentRole !== 'admin' || !supabase || !session) {
+      triggerToast('Only an administrator can save student enrollments.');
+      return;
+    }
 
     const isUuid = (val) =>
       typeof val === 'string' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+    const assignedTrainer = staff.find(
+      (member) => member.id === newStudent.trainerId && normalizeRole(member.role) === 'staff'
+    );
+    const assignedBatch = batches.find(
+      (batch) => batch.id === newStudent.batchId && batch.trainerId === newStudent.trainerId
+    );
+    const linkedStudent = !newStudent.userId || profilesList.some(
+      (userProfile) => userProfile.id === newStudent.userId && normalizeRole(userProfile.role) === 'student'
+    );
+    if (!assignedTrainer || !assignedBatch || !linkedStudent) {
+      triggerToast('Choose a valid student account, trainer, and class assignment.');
+      return;
+    }
 
     const payload = {
       full_name: newStudent.name.trim(),
       user_id: isUuid(newStudent.userId) ? newStudent.userId : null,
-      parent_phone: newStudent.parentPhone || '+91 98400 00000',
+      parent_phone: newStudent.parentPhone.trim() || null,
       abacus_level: newStudent.level,
       batch_id: isUuid(newStudent.batchId) ? newStudent.batchId : null,
       trainer_id: isUuid(newStudent.trainerId) ? newStudent.trainerId : null,
       sessions_completed: 0,
-      monthly_fee: Number(newStudent.monthlyFee) || 1500,
-      fee_status: 'Paid'
+      monthly_fee: newStudent.monthlyFee === '' ? null : Number(newStudent.monthlyFee),
+      fee_status: 'Pending'
     };
 
-    let createdId = `stu-${Date.now()}`;
-    let savedToDb = false;
-
-    if (supabase && session) {
-      const { data, error } = await supabase.from('students').insert(payload).select().single();
-      if (error) {
-        triggerToast(`Supabase save error: ${error.message}`);
-        return;
-      }
-      if (data?.id) {
-        createdId = data.id;
-        savedToDb = true;
-        setIsUsingLiveDb(true);
-      }
+    const { data, error } = await supabase.from('students').insert(payload).select().single();
+    if (error) {
+      triggerToast(`Unable to save student: ${error.message}`);
+      return;
     }
 
     const created = {
-      id: createdId,
-      userId: payload.user_id,
-      name: payload.full_name,
-      age: Number(newStudent.age) || 8,
-      level: payload.abacus_level,
-      trainerId: newStudent.trainerId,
-      batchId: newStudent.batchId,
-      sessionsCompleted: 0,
-      totalCycleSessions: 8,
-      attendanceRate: 100,
-      monthlyFee: payload.monthly_fee,
-      feeStatus: 'Paid',
-      paymentMode: 'UPI',
-      lastPaidDate: '24 Nov 2026',
-      parentPhone: payload.parent_phone
+      id: data.id,
+      userId: data.user_id || null,
+      name: data.full_name || '',
+      level: data.abacus_level || '',
+      trainerId: data.trainer_id || null,
+      batchId: data.batch_id || null,
+      sessionsCompleted: data.sessions_completed ?? 0,
+      totalCycleSessions: data.total_cycle_sessions ?? null,
+      attendanceRate: data.attendance_rate ?? null,
+      monthlyFee: data.monthly_fee == null ? null : Number(data.monthly_fee),
+      feeStatus: data.fee_status || '',
+      paymentMode: data.payment_mode || '',
+      lastPaidDate: data.last_paid_date || '',
+      parentPhone: data.parent_phone || ''
     };
 
-    setStudents((prev) => (savedToDb && !isUsingLiveDb ? [created] : [created, ...prev]));
+    setStudents((prev) => [created, ...prev]);
+    setIsUsingLiveDb(true);
     setShowAddStudentModal(false);
     setNewStudent({
       name: '',
       userId: '',
-      age: 8,
-      level: 'Level 1',
-      trainerId: staff[0]?.id || 'st-2',
-      batchId: batches[0]?.id || 'b-2',
-      monthlyFee: 1500,
+      level: '',
+      trainerId: '',
+      batchId: '',
+      monthlyFee: '',
       parentPhone: ''
     });
-    triggerToast(
-      savedToDb
-        ? `${created.name} saved to Supabase database!`
-        : `${created.name} enrolled in preview mode!`
-    );
-  };
-
-  const handleAddStaffSubmit = (e) => {
-    e.preventDefault();
-    if (!newStaff.name.trim() || currentRole !== 'admin') return;
-    const colors = ['bg-indigo-600', 'bg-teal-600', 'bg-violet-600', 'bg-emerald-600'];
-    const created = {
-      id: `st-${Date.now()}`,
-      name: newStaff.name.trim(),
-      role: newStaff.role,
-      specialties: newStaff.specialties.split(',').map((item) => item.trim()).filter(Boolean),
-      email: newStaff.email || 'trainer@evolvekids.in',
-      phone: newStaff.phone || '+91 98400 11223',
-      activeBatches: 1,
-      classesThisWeek: 2,
-      sharePercent: Number(newStaff.sharePercent) || 50,
-      status: 'Available',
-      avatarColor: colors[staff.length % colors.length]
-    };
-    setStaff((prev) => [...prev, created]);
-    setShowAddStaffModal(false);
-    setNewStaff({ name: '', role: 'Abacus Trainer', specialties: 'Level 1–4, Junior Foundation', email: '', phone: '', sharePercent: 50 });
-    triggerToast(`Trainer ${created.name} added to roster!`);
+    triggerToast(`${created.name} saved.`);
   };
 
   // Navigation filtered by Role
   const navItems = useMemo(() => {
     const all = [
-      { id: 'overview', label: 'Dashboard Overview', icon: LayoutDashboard, roles: ['admin', 'staff', 'student'] },
-      { id: 'classroom', label: 'Live Video Classroom', icon: Video, badge: 'LIVE', roles: ['admin', 'staff', 'student'] },
+      {
+        id: 'overview',
+        label: currentRole === 'admin' ? 'Admin Dashboard' : currentRole === 'staff' ? 'Teaching Dashboard' : 'My Learning Dashboard',
+        icon: LayoutDashboard,
+        roles: ['admin', 'staff', 'student']
+      },
+      { id: 'classroom', label: 'Live Video Classroom', icon: Video, roles: ['admin', 'staff', 'student'] },
       { id: 'students', label: 'Students & Levels', icon: Users, count: roleStudents.length, roles: ['admin', 'staff'] },
-      { id: 'staff', label: 'Staff & Roles', icon: UserCheck, count: staff.length, roles: ['admin', 'staff'] },
+      { id: 'staff', label: 'Staff & Roles', icon: UserCheck, count: staff.length, roles: ['admin'] },
       { id: 'schedule', label: 'Class Timings', icon: Calendar, roles: ['admin', 'staff'] },
       {
         id: 'attendance',
@@ -1715,7 +1402,7 @@ export default function App() {
       },
       {
         id: 'payments',
-        label: currentRole === 'student' ? 'My Fee Status' : 'Fees & 50–50 Payouts',
+        label: currentRole === 'student' ? 'My Fee Status' : 'Fees & Payments',
         icon: IndianRupee,
         roles: ['admin', 'student']
       }
@@ -1723,21 +1410,64 @@ export default function App() {
     return all.filter((item) => item.roles.includes(currentRole));
   }, [currentRole, roleStudents.length, staff.length]);
 
-  const getTrainerName = (id) => staff.find((s) => s.id === id)?.name || 'Ranjitha Ganesh';
+  const visibleTab = navItems.some((item) => item.id === activeTab) ? activeTab : 'overview';
+  const getTrainerName = (id) => staff.find((s) => s.id === id)?.name || '';
 
-  const currentLiveBatch = batches.find((b) => b.id === activeBatchId) || batches[0];
-  const liveBatchStudents = roleStudents.filter((s) => s.batchId === currentLiveBatch.id);
+  const currentLiveBatch = roleBatches.find((batch) => batch.id === activeBatchId) || roleBatches[0] || null;
+  const liveBatchStudents = currentLiveBatch
+    ? roleStudents.filter((student) => student.batchId === currentLiveBatch.id)
+    : [];
+  const currentDateLabel = new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  }).format(new Date());
 
-  // Show Login / Demo Role Gate if not signed in and not in demo mode
-  if (!authLoading && !session && !demoRole) {
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-sm font-medium text-slate-600">
+        Loading your account…
+      </div>
+    );
+  }
+
+  // Show the sign-in screen when there is no authenticated session.
+  if (!session) {
     return (
       <AuthGateScreen
         authError={authError}
         authLoading={authLoading}
         onSignIn={handleSignIn}
         onSignUp={handleSignUp}
-        onEnterDemoRole={handleEnterDemoRole}
       />
+    );
+  }
+
+  if (session && !currentRole) {
+    const profilePermissionDenied = authError?.toLowerCase().includes('permission denied for table profiles');
+    const roleIsMissing = authError?.includes('does not have an assigned');
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-6 text-center shadow-sm">
+          <ShieldCheck className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+          <h1 className="text-lg font-bold text-slate-900">
+            {profilePermissionDenied ? 'Profile access blocked' : roleIsMissing || !authError ? 'Role assignment required' : 'Unable to load account'}
+          </h1>
+          <p className="text-sm text-slate-600 mt-2">
+            {profilePermissionDenied
+              ? 'Sign-in succeeded, but Supabase blocked access to public.profiles. Apply the profile-access migration in supabase/migrations, then sign out and sign in again.'
+              : authError || 'Your account does not have an assigned role. Contact an administrator to get access.'}
+          </p>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="mt-5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -1790,7 +1520,7 @@ export default function App() {
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = visibleTab === item.id;
             return (
               <button
                 key={item.id}
@@ -1846,45 +1576,19 @@ export default function App() {
             className="w-full py-1.5 px-3 rounded-xl bg-indigo-950/80 hover:bg-rose-600 text-indigo-200 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>{session ? 'Sign Out' : 'Switch Account / Exit Demo'}</span>
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-[1440px] mx-auto w-full">
-        {/* Demo Mode Role Switcher Banner */}
-        {!session && demoRole && (
-          <div className="mb-5 px-4 py-2.5 rounded-2xl bg-indigo-900 text-white flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0" />
-              <span>
-                <strong>Demo Mode Active:</strong> Viewing as <strong className="uppercase text-amber-300">{demoRole}</strong> (connect Supabase env vars for live multi-user database sync).
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {['admin', 'staff', 'student'].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => handleEnterDemoRole(r)}
-                  className={`px-2.5 py-1 rounded-lg font-bold capitalize transition cursor-pointer ${
-                    demoRole === r ? 'bg-amber-400 text-slate-950' : 'bg-indigo-800 hover:bg-indigo-700 text-white'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Top Bar */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                {navItems.find((n) => n.id === activeTab)?.label || 'Dashboard Overview'}
+                {navItems.find((n) => n.id === visibleTab)?.label || 'Dashboard Overview'}
               </h2>
               <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200/80 text-slate-700 uppercase">
                 {currentRole}
@@ -1895,12 +1599,12 @@ export default function App() {
                     isUsingLiveDb ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                   }`}
                 >
-                  {isUsingLiveDb ? 'Supabase Live DB' : 'Supabase Auth (Demo Rows)'}
+                  {isUsingLiveDb ? 'Live data' : 'Data unavailable'}
                 </span>
               )}
             </div>
             <p className="text-sm text-slate-500 mt-0.5">
-              Tuesday, 24 Nov 2026 • Evolve Kids Online Abacus Operations
+              {currentDateLabel} • Evolve Kids Academy
             </p>
           </div>
 
@@ -1917,13 +1621,14 @@ export default function App() {
             )}
             <button
               type="button"
-              onClick={() => handleJoinClassroom(roleStudents[0]?.batchId || 'b-1')}
+              onClick={() => currentLiveBatch && handleJoinClassroom(currentLiveBatch.id)}
+              disabled={!currentLiveBatch}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold shadow-sm transition cursor-pointer"
             >
               <Video className="w-4 h-4" />
               {currentRole === 'student' ? 'Join My Live Class' : 'Enter Live Classroom'}
             </button>
-            {(currentRole === 'admin' || currentRole === 'staff') && (
+            {currentRole === 'admin' && (
               <button
                 type="button"
                 onClick={() => setShowAddStudentModal(true)}
@@ -1939,14 +1644,14 @@ export default function App() {
         {/* ===================================================================== */}
         {/* TAB 1: DASHBOARD OVERVIEW                                             */}
         {/* ===================================================================== */}
-        {activeTab === 'overview' && (
+        {visibleTab === 'overview' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {currentRole !== 'student' ? (
                 <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Active Abacus Students
+                      {currentRole === 'admin' ? 'Enrolled Students' : 'My Assigned Students'}
                     </span>
                     <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                       <Users className="w-5 h-5" />
@@ -1955,10 +1660,12 @@ export default function App() {
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-extrabold text-slate-900">{stats.totalStudents}</span>
                     <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      Levels 1–8
+                      {currentRole === 'admin' ? 'Academy-wide' : 'Assigned'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">Enrolled online learners</p>
+                  <p className="text-xs text-slate-500 mt-2">
+                    {currentRole === 'admin' ? 'Across the academy' : 'Assigned to your classes'}
+                  </p>
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm">
@@ -1971,10 +1678,12 @@ export default function App() {
                     </div>
                   </div>
                   <div className="text-2xl font-extrabold text-slate-900">
-                    {roleStudents[0]?.level || 'Level 3'}
+                    {roleStudents[0]?.level || 'Not assigned'}
                   </div>
                   <p className="text-xs text-slate-500 mt-2">
-                    Trainer: {getTrainerName(roleStudents[0]?.trainerId)}
+                    {getTrainerName(roleStudents[0]?.trainerId)
+                      ? `Trainer: ${getTrainerName(roleStudents[0]?.trainerId)}`
+                      : 'Your assigned level and trainer appear here.'}
                   </p>
                 </div>
               )}
@@ -1983,32 +1692,38 @@ export default function App() {
                 <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Teaching Staff & Trainers
+                      {currentRole === 'admin' ? 'Teaching Staff & Trainers' : 'My Assigned Batches'}
                     </span>
                     <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
                       <UserCheck className="w-5 h-5" />
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-extrabold text-slate-900">{stats.activeTrainers}</span>
+                    <span className="text-3xl font-extrabold text-slate-900">
+                      {currentRole === 'admin' ? stats.activeTrainers : roleBatches.length}
+                    </span>
                     <span className="text-xs font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full">
-                      2x/wk batches
+                      {currentRole === 'admin' ? 'Staff accounts' : 'Assigned'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">Certified Evolve Kids trainers</p>
+                  <p className="text-xs text-slate-500 mt-2">
+                    {currentRole === 'admin' ? 'With staff access' : 'Available for your classes'}
+                  </p>
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      8-Session Cycle
+                      My Sessions
                     </span>
                     <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
                       <ClipboardCheck className="w-5 h-5" />
                     </div>
                   </div>
                   <div className="text-3xl font-extrabold text-slate-900">
-                    {roleStudents[0]?.sessionsCompleted ?? 6} / 8
+                    {roleStudents[0]
+                      ? `${roleStudents[0].sessionsCompleted}${roleStudents[0].totalCycleSessions ? ` / ${roleStudents[0].totalCycleSessions}` : ''}`
+                      : 'No enrollment'}
                   </div>
                   <p className="text-xs text-slate-500 mt-2">Sessions completed in current cycle</p>
                 </div>
@@ -2042,10 +1757,12 @@ export default function App() {
                     </div>
                   </div>
                   <div className="text-2xl font-extrabold text-slate-900">
-                    {roleStudents[0]?.feeStatus || 'Paid'}
+                    {roleStudents[0]?.feeStatus || 'Not available'}
                   </div>
                   <p className="text-xs text-slate-500 mt-2">
-                    Monthly Fee: ₹{(roleStudents[0]?.monthlyFee || 1800).toLocaleString('en-IN')}
+                    Monthly Fee: {roleStudents[0]?.monthlyFee == null
+                      ? 'Not available'
+                      : `₹${Number(roleStudents[0].monthlyFee).toLocaleString('en-IN')}`}
                   </p>
                 </div>
               ) : (
@@ -2058,8 +1775,8 @@ export default function App() {
                       <Calendar className="w-5 h-5" />
                     </div>
                   </div>
-                  <div className="text-3xl font-extrabold text-slate-900">{batches.length}</div>
-                  <p className="text-xs text-slate-500 mt-2">50-minute live sessions</p>
+                  <div className="text-3xl font-extrabold text-slate-900">{roleBatches.length}</div>
+                  <p className="text-xs text-slate-500 mt-2">Available classes</p>
                 </div>
               )}
 
@@ -2085,6 +1802,8 @@ export default function App() {
                     ? 'Combined staff & student call time'
                     : currentRole === 'staff'
                     ? 'Total live teaching call time'
+                    : stats.avgAttendance == null
+                    ? 'Attendance data is not available'
                     : `Attendance rate: ${stats.avgAttendance}%`}
                 </p>
               </div>
@@ -2097,9 +1816,7 @@ export default function App() {
                   <h3 className="text-base font-bold text-slate-900">
                     {currentRole === 'student' ? 'My Class Schedule & Live Room' : 'Live & Upcoming Online Batches'}
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Click Join Classroom to launch Jitsi Meet video call + Interactive Soroban abacus
-                  </p>
+                  <p className="text-xs text-slate-500">Your role-specific classes and upcoming sessions.</p>
                 </div>
                 {currentRole !== 'student' && (
                   <button
@@ -2113,11 +1830,8 @@ export default function App() {
               </div>
 
               <div className="space-y-3">
-                {(currentRole === 'student'
-                  ? batches.filter((b) => b.id === (roleStudents[0]?.batchId || 'b-1'))
-                  : batches
-                ).map((batch) => {
-                  const enrolledCount = students.filter((s) => s.batchId === batch.id).length;
+                {roleBatches.map((batch) => {
+                  const enrolledCount = roleStudents.filter((student) => student.batchId === batch.id).length;
                   const isLive = batch.status === 'Live Now';
                   return (
                     <div
@@ -2131,13 +1845,13 @@ export default function App() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-sm text-slate-900">{batch.name}</span>
-                          <span
+                          {batch.status && <span
                             className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
                               isLive ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'
                             }`}
                           >
                             {batch.status}
-                          </span>
+                          </span>}
                         </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
                           <span className="flex items-center gap-1">
@@ -2168,6 +1882,11 @@ export default function App() {
                     </div>
                   );
                 })}
+                {roleBatches.length === 0 && (
+                  <p className="py-6 text-center text-sm text-slate-500">
+                    No classes are assigned to your account yet.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2326,27 +2045,28 @@ export default function App() {
         {/* ===================================================================== */}
         {/* TAB 2: INTEGRATED JITSI VIDEO CLASSROOM + SOROBAN + ANZAN            */}
         {/* ===================================================================== */}
-        {activeTab === 'classroom' && (
+        {visibleTab === 'classroom' && (
           <div className="space-y-5">
             <div className="bg-slate-900 text-white rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 border border-slate-800">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold">
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                  LIVE CLASSROOM
+                  {jitsiJoined ? 'LIVE CLASSROOM' : 'CLASSROOM'}
                 </span>
                 <select
                   value={activeBatchId}
                   onChange={(e) => setActiveBatchId(e.target.value)}
+                  disabled={roleBatches.length === 0}
                   className="bg-slate-800 border border-slate-700 text-sm font-bold text-white rounded-lg px-3 py-1 outline-none"
                 >
-                  {batches.map((b) => (
+                  {roleBatches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name} ({b.time})
                     </option>
                   ))}
                 </select>
                 <span className="text-xs font-mono text-slate-400">
-                  Room: {currentLiveBatch.roomCode}
+                  Room: {currentLiveBatch?.roomCode || 'Not configured'}
                 </span>
               </div>
 
@@ -2390,78 +2110,75 @@ export default function App() {
                     </button>
                   </>
                 )}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await finishAndLogVideoCall();
-                    setActiveTab('overview');
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer"
-                >
-                  <PhoneOff className="w-4 h-4" />
-                  <span>End Class</span>
-                </button>
+                {jitsiJoined && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await finishAndLogVideoCall();
+                      setActiveTab('overview');
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer"
+                  >
+                    <PhoneOff className="w-4 h-4" />
+                    <span>{currentRole === 'student' ? 'Leave Classroom' : 'End Class'}</span>
+                  </button>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
               <div className="xl:col-span-2 space-y-5">
                 {/* Real Embedded Jitsi Meet Room */}
-                <JitsiVideoRoom
-                  roomCode={currentLiveBatch.roomCode}
-                  displayName={currentUserName}
-                  isJoined={jitsiJoined}
-                  elapsedSeconds={callElapsedSeconds}
-                  onJoinToggle={() => startVideoCallSession(activeBatchId)}
-                  onEndClass={finishAndLogVideoCall}
-                />
+                {currentLiveBatch?.roomCode ? (
+                  <JitsiVideoRoom
+                    roomCode={currentLiveBatch.roomCode}
+                    displayName={currentUserName}
+                    isJoined={jitsiJoined}
+                    elapsedSeconds={callElapsedSeconds}
+                    onJoinToggle={() => startVideoCallSession(currentLiveBatch.id)}
+                    onEndClass={finishAndLogVideoCall}
+                  />
+                ) : (
+                  <div className="min-h-[260px] rounded-2xl border border-slate-200 bg-white flex items-center justify-center p-6 text-center">
+                    <p className="text-sm text-slate-600">
+                      {currentLiveBatch
+                        ? 'A video room has not been configured for this class.'
+                        : 'No classes are assigned to your account.'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Interactive Digital Soroban */}
                 <InteractiveSoroban />
               </div>
 
-              {/* Right Column: Anzan Speed Drill + Classroom Chat */}
+              {/* Right Column: Student list and session notes */}
               <div className="space-y-5 flex flex-col">
                 <MentalMathFlashcard />
 
                 {currentRole !== 'student' && (
                   <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5">
-                      Quick Doubt & Attendance Strip
+                      Students in this class
                     </h4>
                     <div className="space-y-2">
-                      {(liveBatchStudents.length ? liveBatchStudents : students.slice(0, 3)).map((stu) => (
+                      {liveBatchStudents.map((stu) => (
                         <div key={stu.id} className="flex items-center justify-between text-xs bg-slate-50 px-3 py-2 rounded-xl">
                           <span className="font-bold text-slate-800">{stu.name}</span>
-                          <div className="flex items-center gap-1.5">
-                            {raisedHands[stu.id] && (
-                              <button
-                                type="button"
-                                onClick={() => setRaisedHands((prev) => ({ ...prev, [stu.id]: false }))}
-                                className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold flex items-center gap-1 cursor-pointer"
-                              >
-                                <Hand className="w-3 h-3" /> Doubt
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleMarkAttendance(stu.id, 'Present')}
-                              className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold cursor-pointer"
-                            >
-                              ✓ Present
-                            </button>
-                          </div>
                         </div>
                       ))}
+                      {liveBatchStudents.length === 0 && (
+                        <p className="py-4 text-center text-xs text-slate-500">No students are assigned to this class.</p>
+                      )}
                     </div>
                   </div>
                 )}
 
                 <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col flex-1 min-h-[260px]">
                   <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                    <h4 className="text-sm font-bold text-slate-900">Classroom Chat & Answers</h4>
-                    <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      Live
+                    <h4 className="text-sm font-bold text-slate-900">Classroom Notes</h4>
+                    <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                      Local only
                     </span>
                   </div>
 
@@ -2475,6 +2192,11 @@ export default function App() {
                         <p className="text-xs text-slate-700">{msg.text}</p>
                       </div>
                     ))}
+                    {chatMessages.length === 0 && (
+                      <p className="py-6 text-center text-xs text-slate-500">
+                        No notes have been added during this session.
+                      </p>
+                    )}
                   </div>
 
                   <form onSubmit={handleSendChat} className="p-3 border-t border-slate-100 flex gap-2">
@@ -2482,7 +2204,7 @@ export default function App() {
                       type="text"
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Send formula or answer..."
+                      placeholder="Add a note for this session..."
                       className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
                     />
                     <button
@@ -2501,7 +2223,7 @@ export default function App() {
         {/* ===================================================================== */}
         {/* TAB 3: STUDENTS & LEVELS                                              */}
         {/* ===================================================================== */}
-        {activeTab === 'students' && currentRole !== 'student' && (
+        {visibleTab === 'students' && currentRole !== 'student' && (
           <div className="space-y-5">
             <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
               <div className="relative flex-1 max-w-md">
@@ -2521,14 +2243,10 @@ export default function App() {
                   onChange={(e) => setLevelFilter(e.target.value)}
                   className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
                 >
-                  <option value="All">All Levels (1–8)</option>
-                  <option value="Level 1">Level 1</option>
-                  <option value="Level 2">Level 2</option>
-                  <option value="Level 3">Level 3</option>
-                  <option value="Level 4">Level 4</option>
-                  <option value="Level 5">Level 5</option>
-                  <option value="Level 6">Level 6</option>
-                  <option value="Level 8">Level 8</option>
+                  <option value="All">All Levels</option>
+                  {[...new Set(roleStudents.map((student) => student.level).filter(Boolean))].sort().map((level) => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
                 </select>
 
                 <select
@@ -2544,16 +2262,18 @@ export default function App() {
                   ))}
                 </select>
 
-                <select
-                  value={feeFilter}
-                  onChange={(e) => setFeeFilter(e.target.value)}
-                  className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
-                >
-                  <option value="All">All Fee Status</option>
-                  <option value="Paid">Paid</option>
-                  <option value="Due Soon">Due Soon</option>
-                  <option value="Overdue">Overdue</option>
-                </select>
+                {currentRole === 'admin' && (
+                  <select
+                    value={feeFilter}
+                    onChange={(e) => setFeeFilter(e.target.value)}
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
+                  >
+                    <option value="All">All Fee Status</option>
+                    {[...new Set(roleStudents.map((student) => student.feeStatus).filter(Boolean))].sort().map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
@@ -2565,20 +2285,23 @@ export default function App() {
                       <th className="py-3.5 px-4">Student & Age</th>
                       <th className="py-3.5 px-4">Abacus Level</th>
                       <th className="py-3.5 px-4">Assigned Trainer</th>
-                      <th className="py-3.5 px-4">8-Session Progress</th>
-                      <th className="py-3.5 px-4">Fee Status</th>
+                      <th className="py-3.5 px-4">Session Progress</th>
+                      {currentRole === 'admin' && <th className="py-3.5 px-4">Fee Status</th>}
                       <th className="py-3.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
                     {filteredStudents.map((stu) => {
-                      const pct = Math.round((stu.sessionsCompleted / stu.totalCycleSessions) * 100);
+                      const pct = stu.totalCycleSessions
+                        ? Math.min(100, Math.round((stu.sessionsCompleted / stu.totalCycleSessions) * 100))
+                        : null;
                       return (
                         <tr key={stu.id} className="hover:bg-slate-50/70 transition">
                           <td className="py-3.5 px-4">
                             <div className="font-bold text-slate-900">{stu.name}</div>
                             <div className="text-xs text-slate-500">
-                              Age {stu.age} • {stu.parentPhone}
+                              {stu.age != null ? `Age ${stu.age}` : ''}
+                              {currentRole === 'admin' && stu.parentPhone ? ` • ${stu.parentPhone}` : ''}
                             </div>
                           </td>
                           <td className="py-3.5 px-4">
@@ -2590,26 +2313,27 @@ export default function App() {
                           <td className="py-3.5 px-4">
                             <div className="font-semibold text-slate-800 text-xs">{getTrainerName(stu.trainerId)}</div>
                             <div className="text-[11px] text-slate-400">
-                              {batches.find((b) => b.id === stu.batchId)?.days}
+                              {roleBatches.find((batch) => batch.id === stu.batchId)?.days || ''}
                             </div>
                           </td>
                           <td className="py-3.5 px-4">
                             <div className="flex items-center justify-between text-xs font-semibold mb-1">
                               <span>
-                                {stu.sessionsCompleted}/{stu.totalCycleSessions} Sessions
+                                {stu.totalCycleSessions
+                                  ? `${stu.sessionsCompleted}/${stu.totalCycleSessions} Sessions`
+                                  : `${stu.sessionsCompleted} recorded`}
                               </span>
-                              <span className="text-slate-400">{stu.attendanceRate}% Att.</span>
+                              <span className="text-slate-400">
+                                {stu.attendanceRate == null ? '' : `${stu.attendanceRate}% Att.`}
+                              </span>
                             </div>
-                            <div className="w-32 h-2 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${
-                                  stu.sessionsCompleted === 8 ? 'bg-amber-500' : 'bg-teal-500'
-                                }`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
+                            {pct != null && (
+                              <div className="w-32 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                <div className="h-full rounded-full bg-teal-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            )}
                           </td>
-                          <td className="py-3.5 px-4">
+                          {currentRole === 'admin' && <td className="py-3.5 px-4">
                             <span
                               className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
                                 stu.feeStatus === 'Paid'
@@ -2619,9 +2343,10 @@ export default function App() {
                                   : 'bg-rose-50 text-rose-700 border border-rose-200'
                               }`}
                             >
-                              {stu.feeStatus} (₹{stu.monthlyFee})
+                              {stu.feeStatus || 'Not recorded'}
+                              {stu.monthlyFee == null ? '' : ` (₹${Number(stu.monthlyFee).toLocaleString('en-IN')})`}
                             </span>
-                          </td>
+                          </td>}
                           <td className="py-3.5 px-4 text-right">
                             <button
                               type="button"
@@ -2634,6 +2359,13 @@ export default function App() {
                         </tr>
                       );
                     })}
+                    {filteredStudents.length === 0 && (
+                      <tr>
+                        <td colSpan={currentRole === 'admin' ? 6 : 5} className="py-8 text-center text-sm text-slate-500">
+                          No assigned students match these filters.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2644,25 +2376,15 @@ export default function App() {
         {/* ===================================================================== */}
         {/* TAB 4: STAFF & ROLES                                                  */}
         {/* ===================================================================== */}
-        {activeTab === 'staff' && currentRole !== 'student' && (
+        {visibleTab === 'staff' && currentRole === 'admin' && (
           <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Evolve Kids Certified Abacus Trainers</h3>
+                <h3 className="text-base font-bold text-slate-900">Staff Accounts & Permissions</h3>
                 <p className="text-xs text-slate-500">
-                  Manage trainer batches, 50–50 revenue split, and Supabase user roles
+                  Review staff assignments and manage account roles.
                 </p>
               </div>
-              {currentRole === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddStaffModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-sm transition cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add New Staff Trainer
-                </button>
-              )}
             </div>
 
             {/* Supabase Account Role Manager (Admin Only) */}
@@ -2691,14 +2413,16 @@ export default function App() {
                     <tbody className="divide-y divide-slate-100">
                       {profilesList.map((prof) => (
                         <tr key={prof.id}>
-                          <td className="py-2.5 px-3 font-bold text-slate-900">{prof.full_name || '—'}</td>
+                          <td className="py-2.5 px-3 font-bold text-slate-900">{prof.full_name || prof.email}</td>
                           <td className="py-2.5 px-3 text-slate-600">{prof.email}</td>
                           <td className="py-2.5 px-3">
                             <select
-                              value={prof.role}
+                              value={normalizeRole(prof.role) || ''}
                               onChange={(e) => handleUpdateUserRole(prof.id, e.target.value)}
+                              disabled={prof.id === session?.user?.id}
                               className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 font-bold text-slate-800 outline-none"
                             >
+                              {!normalizeRole(prof.role) && <option value="">Unassigned</option>}
                               <option value="student">student</option>
                               <option value="staff">staff</option>
                               <option value="admin">admin</option>
@@ -2715,10 +2439,7 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {staff.map((member) => {
                 const assignedStudents = students.filter((s) => s.trainerId === member.id);
-                const monthlyRevenue = assignedStudents
-                  .filter((s) => s.feeStatus === 'Paid')
-                  .reduce((acc, s) => acc + s.monthlyFee, 0);
-                const trainerPayout = Math.round((monthlyRevenue * member.sharePercent) / 100);
+                const assignedBatches = batches.filter((batch) => batch.trainerId === member.id);
 
                 return (
                   <div
@@ -2743,8 +2464,8 @@ export default function App() {
                           </div>
                         </div>
 
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          {member.status}
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase">
+                          {member.role}
                         </span>
                       </div>
 
@@ -2760,27 +2481,24 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 text-center">
+                    <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 text-center">
                       <div className="bg-slate-50 rounded-xl p-2.5">
                         <div className="text-xs text-slate-500">Students</div>
                         <div className="text-base font-extrabold text-slate-900">{assignedStudents.length}</div>
                       </div>
                       <div className="bg-slate-50 rounded-xl p-2.5">
-                        <div className="text-xs text-slate-500">Sessions/Wk</div>
-                        <div className="text-base font-extrabold text-slate-900">{member.classesThisWeek}</div>
-                      </div>
-                      <div className="bg-indigo-50/70 rounded-xl p-2.5">
-                        <div className="text-xs text-indigo-600 font-medium">
-                          {currentRole === 'admin' ? `${member.sharePercent}% Payout` : 'Split'}
-                        </div>
-                        <div className="text-base font-extrabold text-indigo-900">
-                          {currentRole === 'admin' ? `₹${trainerPayout.toLocaleString('en-IN')}` : `${member.sharePercent}%`}
-                        </div>
+                        <div className="text-xs text-slate-500">Assigned Classes</div>
+                        <div className="text-base font-extrabold text-slate-900">{assignedBatches.length}</div>
                       </div>
                     </div>
                   </div>
                 );
               })}
+              {staff.length === 0 && (
+                <p className="col-span-full py-8 text-center text-sm text-slate-500">
+                  No staff accounts are available yet.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -2788,29 +2506,28 @@ export default function App() {
         {/* ===================================================================== */}
         {/* TAB 5: CLASS TIMINGS & ONLINE BATCH SCHEDULE                          */}
         {/* ===================================================================== */}
-        {activeTab === 'schedule' && currentRole !== 'student' && (
+        {visibleTab === 'schedule' && currentRole !== 'student' && (
           <div className="space-y-5">
             <div className="bg-indigo-950 text-white rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-teal-300">
-                  Standard Evolve Kids Cadence
+                  {currentRole === 'admin' ? 'Academy Schedule' : 'Your Teaching Schedule'}
                 </span>
-                <h3 className="text-lg font-extrabold mt-0.5">
-                  2 Live Sessions / Week • 8 Sessions / Monthly Cycle • 50 Mins / Class
-                </h3>
+                <h3 className="text-lg font-extrabold mt-0.5">Assigned classes and meeting details</h3>
               </div>
               <button
                 type="button"
-                onClick={() => handleJoinClassroom('b-1')}
-                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold transition shrink-0 cursor-pointer"
+                onClick={() => currentLiveBatch && handleJoinClassroom(currentLiveBatch.id)}
+                disabled={!currentLiveBatch}
+                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-slate-950 text-xs font-extrabold transition shrink-0 cursor-pointer"
               >
-                Launch Current Live Batch
+                Open Assigned Class
               </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {batches.map((batch) => {
-                const batchStudents = students.filter((s) => s.batchId === batch.id);
+              {roleBatches.map((batch) => {
+                const batchStudents = roleStudents.filter((student) => student.batchId === batch.id);
                 return (
                   <div
                     key={batch.id}
@@ -2822,7 +2539,7 @@ export default function App() {
                           {batch.days}
                         </span>
                         <span className="text-xs font-mono font-semibold text-slate-400">
-                          {batch.roomCode}
+                          {batch.roomCode || 'No room configured'}
                         </span>
                       </div>
 
@@ -2834,7 +2551,7 @@ export default function App() {
 
                       <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
                         <span>
-                          Trainer: <strong className="text-slate-900">{getTrainerName(batch.trainerId)}</strong>
+                          Trainer: <strong className="text-slate-900">{getTrainerName(batch.trainerId) || 'Not assigned'}</strong>
                         </span>
                         <span>
                           Enrolled: <strong className="text-slate-900">{batchStudents.length} Students</strong>
@@ -2853,6 +2570,11 @@ export default function App() {
                   </div>
                 );
               })}
+              {roleBatches.length === 0 && (
+                <p className="col-span-full py-8 text-center text-sm text-slate-500">
+                  No classes are assigned to your account yet.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -2860,25 +2582,29 @@ export default function App() {
         {/* ===================================================================== */}
         {/* TAB 6: SESSION ATTENDANCE TRACKER & CALL DURATIONS                    */}
         {/* ===================================================================== */}
-        {activeTab === 'attendance' && (
+        {visibleTab === 'attendance' && (
           <div className="space-y-6">
             {currentRole !== 'student' && (
               <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">Session Attendance & 8-Class Cycle Tracker</h3>
+                    <h3 className="text-base font-bold text-slate-900">Session Attendance</h3>
                     <p className="text-xs text-slate-500">
-                      Marking Present/Late updates the student's 8-session monthly cycle
+                      Record attendance for a selected class and date.
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
                     <select
                       value={attendanceBatchId}
-                      onChange={(e) => setAttendanceBatchId(e.target.value)}
+                      onChange={(e) => {
+                        setTodayAttendance({});
+                        setAttendanceReady(false);
+                        setAttendanceBatchId(e.target.value);
+                      }}
                       className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none"
                     >
-                      {batches.map((b) => (
+                      {roleBatches.map((b) => (
                         <option key={b.id} value={b.id}>
                           {b.name}
                         </option>
@@ -2887,17 +2613,21 @@ export default function App() {
                     <input
                       type="date"
                       value={sessionDate}
-                      onChange={(e) => setSessionDate(e.target.value)}
+                      onChange={(e) => {
+                        setTodayAttendance({});
+                        setAttendanceReady(false);
+                        setSessionDate(e.target.value);
+                      }}
                       className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 outline-none"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  {students
+                  {roleStudents
                     .filter((s) => s.batchId === attendanceBatchId)
                     .map((stu) => {
-                      const status = todayAttendance[stu.id] || 'Present';
+                      const status = todayAttendance[stu.id] || '';
                       return (
                         <div
                           key={stu.id}
@@ -2911,7 +2641,11 @@ export default function App() {
                               </span>
                             </div>
                             <p className="text-xs text-slate-500 mt-1">
-                              Cycle: <strong className="text-slate-800">{stu.sessionsCompleted} / 8 sessions</strong> • Attendance: {stu.attendanceRate}%
+                              {stu.totalCycleSessions
+                                ? `${stu.sessionsCompleted} / ${stu.totalCycleSessions} sessions`
+                                : `${stu.sessionsCompleted} recorded sessions`}
+                              {' • Attendance: '}
+                              {stu.attendanceRate == null ? 'Not available' : `${stu.attendanceRate}%`}
                             </p>
                           </div>
 
@@ -2935,8 +2669,9 @@ export default function App() {
                                 <button
                                   key={opt}
                                   type="button"
+                                  disabled={!attendanceReady}
                                   onClick={() => handleMarkAttendance(stu.id, opt)}
-                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${styles}`}
+                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition disabled:opacity-50 cursor-pointer ${styles}`}
                                 >
                                   {opt}
                                 </button>
@@ -3041,47 +2776,14 @@ export default function App() {
         )}
 
         {/* ===================================================================== */}
-        {/* TAB 7: FEES & 50-50 PAYOUTS (ADMIN) / OWN FEE STATUS (STUDENT)      */}
+        {/* TAB 7: FEES & PAYMENTS                                               */}
         {/* ===================================================================== */}
-        {activeTab === 'payments' && currentRole !== 'staff' && (
+        {visibleTab === 'payments' && currentRole !== 'staff' && (
           <div className="space-y-6">
-            {currentRole === 'admin' && (
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
-                <div className="mb-4">
-                  <h3 className="text-base font-bold text-slate-900">Automated 50–50 Trainer Payout Calculator</h3>
-                  <p className="text-xs text-slate-500">
-                    Disbursed per student upon completion of each 8-session monthly cycle
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {staff.map((tr) => {
-                    const trStudents = students.filter((s) => s.trainerId === tr.id && s.feeStatus === 'Paid');
-                    const collected = trStudents.reduce((acc, s) => acc + s.monthlyFee, 0);
-                    const payout = Math.round((collected * tr.sharePercent) / 100);
-                    return (
-                      <div key={tr.id} className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
-                        <div className="text-xs font-bold text-slate-900">{tr.name}</div>
-                        <div className="text-[11px] text-slate-500 mb-2">
-                          {trStudents.length} Paid • {tr.sharePercent}% Split
-                        </div>
-                        <div className="text-xl font-extrabold text-indigo-700">
-                          ₹{payout.toLocaleString('en-IN')}
-                        </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          From ₹{collected.toLocaleString('en-IN')} gross fees
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-slate-100">
                 <h3 className="text-base font-bold text-slate-900">
-                  {currentRole === 'admin' ? 'Student Monthly Fee Ledger' : 'My Fee & Session Cycle Status'}
+                  {currentRole === 'admin' ? 'Student Fee Ledger' : 'My Fee Status'}
                 </h3>
               </div>
               <div className="overflow-x-auto">
@@ -3107,10 +2809,12 @@ export default function App() {
                           {getTrainerName(stu.trainerId)}
                         </td>
                         <td className="py-3.5 px-4 text-xs font-semibold text-slate-700">
-                          {stu.sessionsCompleted} / 8 Sessions
+                          {stu.totalCycleSessions
+                            ? `${stu.sessionsCompleted} / ${stu.totalCycleSessions} Sessions`
+                            : `${stu.sessionsCompleted} recorded sessions`}
                         </td>
                         <td className="py-3.5 px-4 font-bold text-slate-900">
-                          ₹{stu.monthlyFee.toLocaleString('en-IN')}
+                          {stu.monthlyFee == null ? 'Not available' : `₹${Number(stu.monthlyFee).toLocaleString('en-IN')}`}
                         </td>
                         <td className="py-3.5 px-4">
                           <span
@@ -3122,12 +2826,12 @@ export default function App() {
                                 : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}
                           >
-                            {stu.feeStatus}
+                            {stu.feeStatus || 'Not recorded'}
                           </span>
                         </td>
                         {currentRole === 'admin' && (
                           <td className="py-3.5 px-4 text-right">
-                            {stu.feeStatus !== 'Paid' ? (
+                            {stu.feeStatus !== 'Paid' && stu.monthlyFee != null ? (
                               <button
                                 type="button"
                                 onClick={() => handleRecordPayment(stu.id)}
@@ -3144,6 +2848,13 @@ export default function App() {
                         )}
                       </tr>
                     ))}
+                    {roleStudents.length === 0 && (
+                      <tr>
+                        <td colSpan={currentRole === 'admin' ? 6 : 5} className="py-8 text-center text-sm text-slate-500">
+                          No student fee records are available.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -3155,7 +2866,7 @@ export default function App() {
       {/* ===================================================================== */}
       {/* MODAL: ENROLL NEW STUDENT                                             */}
       {/* ===================================================================== */}
-      {showAddStudentModal && currentRole !== 'student' && (
+      {showAddStudentModal && currentRole === 'admin' && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between mb-4">
@@ -3177,7 +2888,19 @@ export default function App() {
                   required
                   value={newStudent.name}
                   onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-                  placeholder="e.g., Arjun Krishnan"
+                  placeholder="Student full name"
+                  className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Abacus Level</label>
+                <input
+                  type="text"
+                  required
+                  value={newStudent.level}
+                  onChange={(e) => setNewStudent({ ...newStudent, level: e.target.value })}
+                  placeholder="Level"
                   className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
                 />
               </div>
@@ -3215,11 +2938,14 @@ export default function App() {
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Assign Trainer</label>
                   <select
+                    required
                     value={newStudent.trainerId}
-                    onChange={(e) => setNewStudent({ ...newStudent, trainerId: e.target.value })}
+                    required
+                    onChange={(e) => setNewStudent({ ...newStudent, trainerId: e.target.value, batchId: '' })}
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
                   >
-                    {staff.map((st) => (
+                    <option value="">Select a trainer</option>
+                    {staff.filter((member) => normalizeRole(member.role) === 'staff').map((st) => (
                       <option key={st.id} value={st.id}>
                         {st.name}
                       </option>
@@ -3230,6 +2956,8 @@ export default function App() {
                   <label className="block text-xs font-bold text-slate-700 mb-1">Monthly Fee (₹)</label>
                   <input
                     type="number"
+                    min="0"
+                    required
                     value={newStudent.monthlyFee}
                     onChange={(e) => setNewStudent({ ...newStudent, monthlyFee: e.target.value })}
                     className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
@@ -3240,11 +2968,13 @@ export default function App() {
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Assign Batch</label>
                 <select
+                  required
                   value={newStudent.batchId}
                   onChange={(e) => setNewStudent({ ...newStudent, batchId: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
                 >
-                  {batches.map((b) => (
+                  <option value="">Select a class</option>
+                  {batches.filter((batch) => batch.trainerId === newStudent.trainerId).map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name} ({b.days} • {b.time})
                     </option>
@@ -3252,6 +2982,15 @@ export default function App() {
                 </select>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Parent / Guardian Phone</label>
+                <input
+                  type="tel"
+                  value={newStudent.parentPhone}
+                  onChange={(e) => setNewStudent({ ...newStudent, parentPhone: e.target.value })}
+                  className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
@@ -3272,89 +3011,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ===================================================================== */}
-      {/* MODAL: ADD NEW STAFF TRAINER (ADMIN ONLY)                             */}
-      {/* ===================================================================== */}
-      {showAddStaffModal && currentRole === 'admin' && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-extrabold text-slate-900">Add Abacus Staff Trainer</h3>
-              <button
-                type="button"
-                onClick={() => setShowAddStaffModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddStaffSubmit} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Trainer Full Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newStaff.name}
-                  onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
-                  placeholder="e.g., Divya Venkatesh"
-                  className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Role / Title</label>
-                  <input
-                    type="text"
-                    value={newStaff.role}
-                    onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Revenue Share (%)</label>
-                  <input
-                    type="number"
-                    min="10"
-                    max="100"
-                    value={newStaff.sharePercent}
-                    onChange={(e) => setNewStaff({ ...newStaff, sharePercent: e.target.value })}
-                    className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Email ID</label>
-                <input
-                  type="email"
-                  value={newStaff.email}
-                  onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                  placeholder="trainer@evolvekids.in"
-                  className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddStaffModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-sm cursor-pointer"
-                >
-                  Save Trainer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
