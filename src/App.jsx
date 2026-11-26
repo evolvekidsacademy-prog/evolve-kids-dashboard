@@ -741,7 +741,7 @@ export default function App() {
         ).order('created_at', { ascending: false })
       ]);
 
-      const loadedStudents = studentsRes.data || [];
+      const loadedStudents = studentsRes.error ? [] : studentsRes.data || [];
       const batchIds = [...new Set(loadedStudents.map((student) => student.batch_id).filter(Boolean))];
       const trainerIds = [...new Set(loadedStudents.map((student) => student.trainer_id).filter(Boolean))];
       const profilesRes = roleToFetch === 'admin'
@@ -758,16 +758,17 @@ export default function App() {
         ? await batchesQuery
         : { data: [], error: null };
 
-      const results = [batchesRes, studentsRes, callLogsRes];
-      if (roleToFetch === 'admin') results.push(profilesRes);
-      const failedResult = results.find((result) => result.error);
-      if (failedResult) throw failedResult.error;
-      if (roleToFetch === 'student' && profilesRes.error) {
-        triggerToast(`Unable to load trainer details: ${profilesRes.error.message}`);
+      const loadErrors = [];
+      if (batchesRes.error) loadErrors.push(`classes: ${batchesRes.error.message}`);
+      if (studentsRes.error) loadErrors.push(`students: ${studentsRes.error.message}`);
+      if (profilesRes.error) loadErrors.push(`profiles: ${profilesRes.error.message}`);
+      if (callLogsRes.error) loadErrors.push(`call logs: ${callLogsRes.error.message}`);
+      if (loadErrors.length) {
+        triggerToast(`Some dashboard data could not be loaded: ${loadErrors.join('; ')}`);
       }
 
-      const loadedBatches = batchesRes.data || [];
-      const loadedCallLogs = callLogsRes.data || [];
+      const loadedBatches = batchesRes.error ? [] : batchesRes.data || [];
+      const loadedCallLogs = callLogsRes.error ? [] : callLogsRes.data || [];
 
       setBatches(
         loadedBatches.map((batch) => ({
@@ -803,7 +804,7 @@ export default function App() {
           parentPhone: student.parent_phone || ''
         }))
       );
-      const loadedProfiles = profilesRes.data || [];
+      const loadedProfiles = profilesRes.error ? [] : profilesRes.data || [];
       setProfilesList(roleToFetch === 'admin' ? loadedProfiles : []);
       setStaff(
         (roleToFetch === 'admin'
@@ -838,7 +839,7 @@ export default function App() {
         }))
       );
 
-      setIsUsingLiveDb(true);
+      setIsUsingLiveDb(!batchesRes.error && (roleToFetch !== 'student' || !studentsRes.error));
     } catch (error) {
       setIsUsingLiveDb(false);
       triggerToast(`Unable to load dashboard data: ${error.message}`);
