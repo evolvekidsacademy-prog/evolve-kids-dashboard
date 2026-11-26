@@ -1,4 +1,4 @@
-import { createSign } from 'node:crypto';
+import { createPrivateKey, createSign } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
 import { createClient } from '@supabase/supabase-js';
@@ -26,6 +26,29 @@ export default async function handler(req, res) {
   if (!appId || !keyId || !privateKey || !supabaseUrl || !supabaseAnonKey) {
     console.error('JaaS token configuration is incomplete.');
     return respond(res, 503, { error: 'JaaS is not configured on the server.' });
+  }
+  if (appId.includes('/') || keyId.includes('/')) {
+    console.error('JaaS App ID or API key ID has an unexpected prefix.');
+    return respond(res, 503, {
+      error: 'Set JAAS_APP_ID to the App ID and JAAS_API_KEY_ID to the key ID only; the token service combines them.'
+    });
+  }
+
+  let signingKey;
+  try {
+    signingKey = createPrivateKey(privateKey);
+  } catch (error) {
+    console.error('The configured JaaS private key is invalid:', error.message);
+    return respond(res, 503, { error: 'JAAS_PRIVATE_KEY must be a valid PEM-encoded RSA private key.' });
+  }
+  if (
+    signingKey.asymmetricKeyType !== 'rsa' ||
+    signingKey.asymmetricKeyDetails?.modulusLength !== 4096
+  ) {
+    console.error('The configured JaaS private key is not a 4096-bit RSA key.');
+    return respond(res, 503, {
+      error: 'JaaS requires a matching 4096-bit RSA key pair. Upload its public key to the JaaS App and configure the private key in Vercel.'
+    });
   }
 
   const roomName = req.body?.roomName;
@@ -134,7 +157,7 @@ export default async function handler(req, res) {
     const signer = createSign('RSA-SHA256');
     signer.update(signingInput);
     signer.end();
-    const signature = signer.sign(privateKey).toString('base64url');
+    const signature = signer.sign(signingKey).toString('base64url');
     return respond(res, 200, { appId, token: `${signingInput}.${signature}` });
   } catch (error) {
     console.error('Unable to sign a JaaS token:', error.message);

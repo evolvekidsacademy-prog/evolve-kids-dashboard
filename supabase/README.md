@@ -16,10 +16,10 @@ Apply `migrations/20261126162000_jaas_student_direct_call_logs.sql` next. It all
 
 ## JaaS and Vercel setup
 
-1. In the [8x8 JaaS console](https://jaas.8x8.vc/), create an App, [generate an RSA API key](https://developer.8x8.com/jaas/docs/api-keys-generate-add), and upload its public key. Keep the private key for Vercel only. See the [JaaS JWT requirements](https://developer.8x8.com/jaas/docs/api-keys-jwt) and [IFrame API integration](https://developer.8x8.com/jaas/docs/iframe-api-integration).
+1. In the [8x8 JaaS console](https://jaas.8x8.vc/), create an App. Generate an **unencrypted 4096-bit RSA** key pair as described in the [JaaS API key guide](https://developer.8x8.com/jaas/docs/api-keys-generate-add), upload its public key to that App, and record the Key ID JaaS gives you. Keep the matching private key for Vercel only. See the [JaaS JWT requirements](https://developer.8x8.com/jaas/docs/api-keys-jwt) and [IFrame API integration](https://developer.8x8.com/jaas/docs/iframe-api-integration).
 2. In Vercel, add these environment variables for every environment where you deploy the app:
    - `JAAS_APP_ID`: the App ID from the JaaS console.
-   - `JAAS_API_KEY_ID`: the key ID associated with the uploaded public key.
+   - `JAAS_API_KEY_ID`: only the key ID associated with the uploaded public key; the token service adds the App ID prefix.
    - `JAAS_PRIVATE_KEY`: the matching private RSA key, including its PEM header and footer. Newlines may be entered literally or as `\n`.
    - `SUPABASE_URL` and `SUPABASE_ANON_KEY`: the same project URL and public anon key used by the dashboard. These are used by the token function to verify the signed-in user and role.
    - Keep the existing `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` variables for the browser app.
