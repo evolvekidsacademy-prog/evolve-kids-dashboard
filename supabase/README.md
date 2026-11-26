@@ -14,6 +14,8 @@ Apply `migrations/20261126160000_jaas_auto_attendance_link.sql` after that migra
 
 Apply `migrations/20261126162000_jaas_student_direct_call_logs.sql` next. It allows student accounts to save their own batch-independent JaaS session logs.
 
+Apply `migrations/20261126173500_class_session_log_privileges.sql` after that migration. It grants authenticated users the table privileges needed to save their own session timing; row-level security continues to control which records they can read or insert.
+
 ## JaaS and Vercel setup
 
 1. In the [8x8 JaaS console](https://jaas.8x8.vc/), create an App. Generate an **unencrypted 4096-bit RSA** key pair as described in the [JaaS API key guide](https://developer.8x8.com/jaas/docs/api-keys-generate-add), upload its public key to that App, and record the Key ID JaaS gives you. Keep the matching private key for Vercel only. See the [JaaS JWT requirements](https://developer.8x8.com/jaas/docs/api-keys-jwt) and [IFrame API integration](https://developer.8x8.com/jaas/docs/iframe-api-integration).

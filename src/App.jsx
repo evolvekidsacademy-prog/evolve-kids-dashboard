@@ -321,7 +321,9 @@ function JitsiVideoRoom({
   const jitsiContainerRef = useRef(null);
   const apiRef = useRef(null);
   const participantListenerRef = useRef(null);
+  const conferenceLeftListenerRef = useRef(null);
   const participantJoinedHandlerRef = useRef(onParticipantJoined);
+  const endClassHandlerRef = useRef(onEndClass);
   const [loadFailure, setLoadFailure] = useState(null);
 
   const sanitizedRoom = useMemo(() => {
@@ -336,7 +338,8 @@ function JitsiVideoRoom({
 
   useEffect(() => {
     participantJoinedHandlerRef.current = onParticipantJoined;
-  }, [onParticipantJoined]);
+    endClassHandlerRef.current = onEndClass;
+  }, [onParticipantJoined, onEndClass]);
 
   useEffect(() => {
     if (!isJoined) {
@@ -346,12 +349,16 @@ function JitsiVideoRoom({
           if (participantListenerRef.current && typeof removeEventListener === 'function') {
             removeEventListener.call(apiRef.current, 'participantJoined', participantListenerRef.current);
           }
+          if (conferenceLeftListenerRef.current && typeof removeEventListener === 'function') {
+            removeEventListener.call(apiRef.current, 'videoConferenceLeft', conferenceLeftListenerRef.current);
+          }
           apiRef.current.dispose();
         } catch (error) {
           console.error('Unable to close the JaaS meeting:', error);
         }
         apiRef.current = null;
         participantListenerRef.current = null;
+        conferenceLeftListenerRef.current = null;
       }
       return;
     }
@@ -390,13 +397,16 @@ function JitsiVideoRoom({
           }
         });
         const handleParticipantJoined = (event) => participantJoinedHandlerRef.current?.(event);
+        const handleConferenceLeft = () => endClassHandlerRef.current?.();
         apiRef.current = api;
         const addEventListener = api.addEventListener || api.addListener;
         if (typeof addEventListener !== 'function') {
-          throw new Error('The JaaS meeting API does not support participant events.');
+          throw new Error('The JaaS meeting API does not support meeting events.');
         }
         addEventListener.call(api, 'participantJoined', handleParticipantJoined);
+        addEventListener.call(api, 'videoConferenceLeft', handleConferenceLeft);
         participantListenerRef.current = handleParticipantJoined;
+        conferenceLeftListenerRef.current = handleConferenceLeft;
       } catch (error) {
         console.error('Unable to initialize the JaaS meeting:', error);
         reportLoadError(error instanceof Error ? error.message : 'Unable to initialize the JaaS meeting.');
@@ -438,12 +448,16 @@ function JitsiVideoRoom({
           if (participantListenerRef.current && typeof removeEventListener === 'function') {
             removeEventListener.call(apiRef.current, 'participantJoined', participantListenerRef.current);
           }
+          if (conferenceLeftListenerRef.current && typeof removeEventListener === 'function') {
+            removeEventListener.call(apiRef.current, 'videoConferenceLeft', conferenceLeftListenerRef.current);
+          }
           apiRef.current.dispose();
         } catch (error) {
           console.error('Unable to close the JaaS meeting:', error);
         }
         apiRef.current = null;
         participantListenerRef.current = null;
+        conferenceLeftListenerRef.current = null;
       }
     };
   }, [appId, jwt, isJoined, sanitizedRoom, displayName, scriptUrl, loadKey]);
@@ -678,6 +692,7 @@ export default function App() {
   const [callStartedAt, setCallStartedAt] = useState(null);
   const [callSessionDate, setCallSessionDate] = useState('');
   const [callElapsedSeconds, setCallElapsedSeconds] = useState(0);
+  const callFinishInProgressRef = useRef(false);
   const autoAttendanceStudentIdsRef = useRef(new Set());
   const autoAttendanceWritesRef = useRef(new Set());
 
@@ -1264,6 +1279,7 @@ export default function App() {
       const startedAt = getCurrentTimestamp();
       setCallStartedAt(startedAt);
       setCallSessionDate(toLocalDateString(new Date(startedAt)));
+      callFinishInProgressRef.current = false;
       autoAttendanceStudentIdsRef.current = new Set();
       autoAttendanceWritesRef.current = new Set();
       setCallElapsedSeconds(0);
@@ -1304,6 +1320,7 @@ export default function App() {
       const startedAt = getCurrentTimestamp();
       setCallStartedAt(startedAt);
       setCallSessionDate(toLocalDateString(new Date(startedAt)));
+      callFinishInProgressRef.current = false;
       autoAttendanceStudentIdsRef.current = new Set();
       autoAttendanceWritesRef.current = new Set();
       setCallElapsedSeconds(0);
@@ -1325,7 +1342,8 @@ export default function App() {
   };
 
   const finishAndLogVideoCall = async () => {
-    if (!jitsiJoined) return;
+    if (!jitsiJoined || callFinishInProgressRef.current) return;
+    callFinishInProgressRef.current = true;
     const pendingAttendanceWrites = Array.from(autoAttendanceWritesRef.current);
     if (pendingAttendanceWrites.length > 0) await Promise.all(pendingAttendanceWrites);
 
