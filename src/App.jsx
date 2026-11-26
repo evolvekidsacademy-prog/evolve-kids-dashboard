@@ -9,26 +9,19 @@ import {
   IndianRupee,
   Plus,
   Search,
-  Mic,
-  MicOff,
-  VideoOff,
-  MonitorUp,
   PhoneOff,
   RotateCcw,
   Sparkles,
   CheckCircle2,
   Clock,
-  Send,
   Award,
   ChevronRight,
   X,
   Check,
   Menu,
-  Play,
   Calculator,
   LogOut,
   ShieldCheck,
-  ExternalLink,
   RefreshCw,
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
@@ -52,6 +45,9 @@ const normalizeRole = (role) => {
 };
 
 const getCurrentTimestamp = () => Date.now();
+
+const toLocalDateString = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 function formatDuration(totalSeconds) {
   const secs = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -307,44 +303,77 @@ function MentalMathFlashcard() {
   );
 }
 
-// --- EMBEDDED JITSI MEET VIDEO CALL COMPONENT ---
-function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoinToggle, onEndClass }) {
+// --- EMBEDDED JITSI AS A SERVICE VIDEO CALL COMPONENT ---
+function JitsiVideoRoom({
+  appId,
+  jwt,
+  roomCode,
+  displayName,
+  isJoined,
+  isConnecting,
+  attemptId,
+  elapsedSeconds,
+  onJoinToggle,
+  onEndClass,
+  endCallLabel,
+  onParticipantJoined
+}) {
   const jitsiContainerRef = useRef(null);
   const apiRef = useRef(null);
-  const [useIframeFallback, setUseIframeFallback] = useState(false);
+  const participantListenerRef = useRef(null);
+  const participantJoinedHandlerRef = useRef(onParticipantJoined);
+  const [loadFailure, setLoadFailure] = useState(null);
 
   const sanitizedRoom = useMemo(() => {
     return (roomCode || '').replace(/[^a-zA-Z0-9_-]/g, '');
   }, [roomCode]);
 
-  const jitsiUrl = `https://meet.jit.si/${sanitizedRoom}`;
+  const scriptUrl = `https://8x8.vc/${appId}/external_api.js`;
+  const loadKey = `${appId}/${sanitizedRoom}:${jwt || ''}:${attemptId || ''}`;
+  const loadError = loadFailure?.key === loadKey ? loadFailure.message : '';
+  const configurationError =
+    isJoined && (!appId || !jwt || !sanitizedRoom) ? 'JaaS credentials or room name are missing.' : '';
+
+  useEffect(() => {
+    participantJoinedHandlerRef.current = onParticipantJoined;
+  }, [onParticipantJoined]);
 
   useEffect(() => {
     if (!isJoined) {
       if (apiRef.current) {
         try {
+          const removeEventListener = apiRef.current.removeEventListener || apiRef.current.removeListener;
+          if (participantListenerRef.current && typeof removeEventListener === 'function') {
+            removeEventListener.call(apiRef.current, 'participantJoined', participantListenerRef.current);
+          }
           apiRef.current.dispose();
-        } catch {
-          // ignore cleanup errors
+        } catch (error) {
+          console.error('Unable to close the JaaS meeting:', error);
         }
         apiRef.current = null;
+        participantListenerRef.current = null;
       }
       return;
     }
 
+    if (!appId || !jwt || !sanitizedRoom) return;
+
     let cancelled = false;
+    let script = null;
+    const reportLoadError = (message) => setLoadFailure({ key: loadKey, message });
 
     const initJitsi = () => {
       if (cancelled || !jitsiContainerRef.current) return;
       if (!window.JitsiMeetExternalAPI) {
-        setUseIframeFallback(true);
+        reportLoadError('The JaaS meeting API did not load.');
         return;
       }
 
       try {
         jitsiContainerRef.current.innerHTML = '';
-        const api = new window.JitsiMeetExternalAPI('meet.jit.si', {
-          roomName: sanitizedRoom,
+        const api = new window.JitsiMeetExternalAPI('8x8.vc', {
+          roomName: `${appId}/${sanitizedRoom}`,
+          jwt,
           parentNode: jitsiContainerRef.current,
           width: '100%',
           height: 400,
@@ -360,42 +389,64 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
             SHOW_JITSI_WATERMARK: false
           }
         });
+        const handleParticipantJoined = (event) => participantJoinedHandlerRef.current?.(event);
         apiRef.current = api;
-        setUseIframeFallback(false);
-      } catch {
-        setUseIframeFallback(true);
+        const addEventListener = api.addEventListener || api.addListener;
+        if (typeof addEventListener !== 'function') {
+          throw new Error('The JaaS meeting API does not support participant events.');
+        }
+        addEventListener.call(api, 'participantJoined', handleParticipantJoined);
+        participantListenerRef.current = handleParticipantJoined;
+      } catch (error) {
+        console.error('Unable to initialize the JaaS meeting:', error);
+        reportLoadError(error instanceof Error ? error.message : 'Unable to initialize the JaaS meeting.');
       }
     };
 
-    if (window.JitsiMeetExternalAPI) {
+    const handleScriptLoad = () => {
+      if (script) script.dataset.jaasLoaded = 'true';
       initJitsi();
+    };
+    const handleScriptError = () => reportLoadError('Unable to load the JaaS meeting API. Check the App ID and network access.');
+
+    if (window.JitsiMeetExternalAPI) {
+      Promise.resolve().then(initJitsi);
     } else {
-      const existingScript = document.querySelector('script[src="https://meet.jit.si/external_api.js"]');
-      if (existingScript) {
-        existingScript.addEventListener('load', initJitsi);
-        existingScript.addEventListener('error', () => setUseIframeFallback(true));
+      script = document.querySelector(`script[src="${scriptUrl}"]`);
+      if (script?.dataset.jaasLoaded === 'true') {
+        Promise.resolve().then(handleScriptError);
+      } else if (script) {
+        script.addEventListener('load', handleScriptLoad);
+        script.addEventListener('error', handleScriptError);
       } else {
-        const script = document.createElement('script');
-        script.src = 'https://meet.jit.si/external_api.js';
+        script = document.createElement('script');
+        script.src = scriptUrl;
         script.async = true;
-        script.onload = initJitsi;
-        script.onerror = () => setUseIframeFallback(true);
+        script.addEventListener('load', handleScriptLoad);
+        script.addEventListener('error', handleScriptError);
         document.body.appendChild(script);
       }
     }
 
     return () => {
       cancelled = true;
+      script?.removeEventListener('load', handleScriptLoad);
+      script?.removeEventListener('error', handleScriptError);
       if (apiRef.current) {
         try {
+          const removeEventListener = apiRef.current.removeEventListener || apiRef.current.removeListener;
+          if (participantListenerRef.current && typeof removeEventListener === 'function') {
+            removeEventListener.call(apiRef.current, 'participantJoined', participantListenerRef.current);
+          }
           apiRef.current.dispose();
-        } catch {
-          // ignore cleanup errors
+        } catch (error) {
+          console.error('Unable to close the JaaS meeting:', error);
         }
         apiRef.current = null;
+        participantListenerRef.current = null;
       }
     };
-  }, [isJoined, sanitizedRoom, displayName]);
+  }, [appId, jwt, isJoined, sanitizedRoom, displayName, scriptUrl, loadKey]);
 
   return (
     <div className="bg-slate-900 text-white rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
@@ -403,7 +454,7 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
         <div className="flex items-center gap-2 flex-wrap">
           <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
           <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-            Jitsi Meet Live Video Call • Room: <span className="font-mono text-amber-300">{sanitizedRoom}</span>
+            JaaS Live Video Call • Room: <span className="font-mono text-amber-300">{sanitizedRoom}</span>
           </span>
           {isJoined && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold">
@@ -414,24 +465,15 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
         </div>
 
         <div className="flex items-center gap-2">
-          <a
-            href={jitsiUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
-          >
-            <span>Open in New Tab</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-
           {!isJoined ? (
             <button
               type="button"
               onClick={onJoinToggle}
+              disabled={isConnecting}
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer"
             >
               <Video className="w-3.5 h-3.5" />
-              Start / Join Video Call
+              {isConnecting ? 'Connecting…' : 'Join Room'}
             </button>
           ) : (
             <button
@@ -440,7 +482,7 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer"
             >
               <PhoneOff className="w-3.5 h-3.5" />
-              Leave Call
+              {endCallLabel}
             </button>
           )}
         </div>
@@ -453,28 +495,19 @@ function JitsiVideoRoom({ roomCode, displayName, isJoined, elapsedSeconds, onJoi
           </div>
           <h4 className="text-base font-bold text-white">Ready to Connect Live Video Classroom</h4>
           <p className="text-xs text-slate-400 max-w-md mt-1 mb-4">
-            Launches a free Jitsi Meet video room (<span className="font-mono text-slate-300">{sanitizedRoom}</span>) with camera, microphone, and screen sharing so you can teach live while using the Digital Soroban below.
+            Join the JaaS room <span className="font-mono text-slate-300">{sanitizedRoom}</span> with camera, microphone, and screen sharing.
           </p>
-          <button
-            type="button"
-            onClick={onJoinToggle}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg transition cursor-pointer"
-          >
-            <Play className="w-4 h-4 fill-current" />
-            Launch Jitsi Video Call Now
-          </button>
+          <p className="text-xs text-slate-400">Select Join Room above when you are ready.</p>
         </div>
-      ) : useIframeFallback ? (
-        <iframe
-          title={`Jitsi Classroom ${sanitizedRoom}`}
-          src={`${jitsiUrl}#config.prejoinPageEnabled=false&userInfo.displayName="${encodeURIComponent(
-            displayName || ''
-          )}"`}
-          allow="camera; microphone; fullscreen; display-capture; autoplay"
-          className="w-full h-[400px] border-0 bg-slate-950"
-        />
       ) : (
-        <div ref={jitsiContainerRef} className="w-full min-h-[400px] bg-slate-950" />
+        <>
+          {(loadError || configurationError) && (
+            <div role="alert" className="p-4 text-sm text-rose-200 bg-rose-950">
+              {loadError || configurationError}
+            </div>
+          )}
+          <div ref={jitsiContainerRef} className="w-full min-h-[400px] bg-slate-950" />
+        </>
       )}
     </div>
   );
@@ -630,16 +663,23 @@ export default function App() {
   const [callLogs, setCallLogs] = useState([]);
   const [adminCallRoleFilter, setAdminCallRoleFilter] = useState('All');
 
-  // Classroom & Jitsi State
+  // Classroom & JaaS State
   const [activeBatchId, setActiveBatchId] = useState('');
   const [jitsiJoined, setJitsiJoined] = useState(false);
+  const [isDirectCall, setIsDirectCall] = useState(false);
+  const [callConnecting, setCallConnecting] = useState(false);
+  const [jaasConfig, setJaasConfig] = useState(null);
+  const [directRoomDraft, setDirectRoomDraft] = useState('');
+  const [directRoomCode, setDirectRoomCode] = useState('');
+  const [showDirectAttendance, setShowDirectAttendance] = useState(false);
+  const [directAttendanceSessionId, setDirectAttendanceSessionId] = useState(null);
+  const [directAttendanceDate, setDirectAttendanceDate] = useState('');
+  const [directAttendanceStatuses, setDirectAttendanceStatuses] = useState({});
   const [callStartedAt, setCallStartedAt] = useState(null);
+  const [callSessionDate, setCallSessionDate] = useState('');
   const [callElapsedSeconds, setCallElapsedSeconds] = useState(0);
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
-  const [screenSharing, setScreenSharing] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState('');
+  const autoAttendanceStudentIdsRef = useRef(new Set());
+  const autoAttendanceWritesRef = useRef(new Set());
 
   // Filters & Modals
   const [studentSearch, setStudentSearch] = useState('');
@@ -1117,40 +1157,209 @@ export default function App() {
   }, [callLogs, currentRole]);
 
   // Start / Stop & Log Video Call Duration
-  const startVideoCallSession = (batchIdToJoin) => {
-    const targetBatchId = batchIdToJoin || activeBatchId || currentLiveBatch?.id;
-    if (!targetBatchId || !roleBatches.some((batch) => batch.id === targetBatchId)) {
-      triggerToast('No class is assigned to your account.');
+  const requestJaasToken = async (roomName, scope) => {
+    if (!session?.access_token) throw new Error('Your sign-in has expired. Sign in again.');
+
+    const response = await fetch('/api/jaas-token', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ roomName, ...scope })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `JaaS access request failed (HTTP ${response.status}).`);
+    if (!payload.appId || !payload.token) throw new Error('The JaaS token service returned an invalid response.');
+    return payload;
+  };
+
+  const handleJaasParticipantJoined = async (event) => {
+    if (
+      !['admin', 'staff'].includes(currentRole) ||
+      isDirectCall ||
+      !activeBatchId ||
+      !callSessionDate ||
+      !roleBatches.some((batch) => batch.id === activeBatchId)
+    ) {
       return;
     }
-    setActiveBatchId(targetBatchId);
-    if (!jitsiJoined) {
-      setCallStartedAt(getCurrentTimestamp());
+
+    const userId = event?.userContext?.id;
+    if (typeof userId !== 'string') return;
+
+    const student = roleStudents.find(
+      (candidate) => candidate.userId === userId && candidate.batchId === activeBatchId
+    );
+    if (!student || autoAttendanceStudentIdsRef.current.has(student.id)) return;
+    if (!supabase || !session?.user?.id) {
+      triggerToast('Could not automatically mark attendance because the database connection is unavailable.');
+      return;
+    }
+
+    autoAttendanceStudentIdsRef.current.add(student.id);
+    const writePromise = supabase
+      .from('attendance')
+      .upsert(
+        {
+          student_id: student.id,
+          batch_id: activeBatchId,
+          session_date: callSessionDate,
+          status: 'Present',
+          marked_by: session.user.id
+        },
+        { onConflict: 'student_id,batch_id,session_date' }
+      )
+      .then(({ error }) => {
+        if (error) {
+          autoAttendanceStudentIdsRef.current.delete(student.id);
+          triggerToast(`Unable to automatically mark ${student.name} present: ${error.message}`);
+          return;
+        }
+
+        triggerToast(`Attendance automatically marked for ${student.name}.`);
+        setTodayAttendance((previous) => ({ ...previous, [student.id]: 'Present' }));
+      })
+      .catch((error) => {
+        autoAttendanceStudentIdsRef.current.delete(student.id);
+        triggerToast(
+          `Unable to automatically mark ${student.name} present: ${
+            error instanceof Error ? error.message : 'Unexpected database error.'
+          }`
+        );
+      })
+      .finally(() => autoAttendanceWritesRef.current.delete(writePromise));
+    autoAttendanceWritesRef.current.add(writePromise);
+    await writePromise;
+  };
+
+  const startVideoCallSession = async (batchIdToJoin) => {
+    const targetBatchId = batchIdToJoin || activeBatchId || currentLiveBatch?.id;
+    if (!targetBatchId || !roleBatches.some((batch) => batch.id === targetBatchId)) {
+      triggerToast('That assigned class is no longer available.');
+      return false;
+    }
+    if (!['admin', 'staff', 'student'].includes(currentRole)) {
+      triggerToast('Your account is not permitted to join classroom calls.');
+      return false;
+    }
+    if (jitsiJoined || callConnecting) {
+      triggerToast('A classroom call is already in progress.');
+      return false;
+    }
+    const batch = roleBatches.find((item) => item.id === targetBatchId);
+    if (!batch?.roomCode) {
+      triggerToast('This class does not have a video room configured yet.');
+      return false;
+    }
+
+    setCallConnecting(true);
+    try {
+      const jaas = await requestJaasToken(batch.roomCode, { batchId: batch.id });
+      setJaasConfig(jaas);
+      setIsDirectCall(false);
+      setShowDirectAttendance(false);
+      setDirectAttendanceSessionId(null);
+      setActiveBatchId(targetBatchId);
+      const startedAt = getCurrentTimestamp();
+      setCallStartedAt(startedAt);
+      setCallSessionDate(toLocalDateString(new Date(startedAt)));
+      autoAttendanceStudentIdsRef.current = new Set();
+      autoAttendanceWritesRef.current = new Set();
       setCallElapsedSeconds(0);
       setJitsiJoined(true);
+      triggerToast(`Joining ${batch.name} room…`);
+      return true;
+    } catch (error) {
+      triggerToast(`Unable to start JaaS classroom: ${error.message}`);
+      return false;
+    } finally {
+      setCallConnecting(false);
     }
+  };
+
+  const startDirectVideoCall = async (roomCode) => {
+    if (!['admin', 'staff', 'student'].includes(currentRole)) {
+      triggerToast('Your account is not permitted to join direct calls.');
+      return false;
+    }
+    const room = (roomCode || '').trim();
+    if (!/^[a-zA-Z0-9_-]{3,64}$/.test(room)) {
+      triggerToast('Use a room name with 3–64 letters, numbers, hyphens, or underscores.');
+      return false;
+    }
+    if (jitsiJoined || callConnecting) {
+      triggerToast('A classroom call is already in progress.');
+      return false;
+    }
+
+    setCallConnecting(true);
+    try {
+      const jaas = await requestJaasToken(room, { directCall: true });
+      setJaasConfig(jaas);
+      setDirectRoomCode(room);
+      setIsDirectCall(true);
+      setShowDirectAttendance(false);
+      setDirectAttendanceSessionId(null);
+      const startedAt = getCurrentTimestamp();
+      setCallStartedAt(startedAt);
+      setCallSessionDate(toLocalDateString(new Date(startedAt)));
+      autoAttendanceStudentIdsRef.current = new Set();
+      autoAttendanceWritesRef.current = new Set();
+      setCallElapsedSeconds(0);
+      setJitsiJoined(true);
+      return true;
+    } catch (error) {
+      triggerToast(`Unable to start direct JaaS call: ${error.message}`);
+      return false;
+    } finally {
+      setCallConnecting(false);
+    }
+  };
+
+  const generateDirectRoom = () => {
+    const randomBytes = new Uint8Array(8);
+    window.crypto.getRandomValues(randomBytes);
+    const room = `evolvekids-test-${Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+    setDirectRoomDraft(room);
   };
 
   const finishAndLogVideoCall = async () => {
     if (!jitsiJoined) return;
+    const pendingAttendanceWrites = Array.from(autoAttendanceWritesRef.current);
+    if (pendingAttendanceWrites.length > 0) await Promise.all(pendingAttendanceWrites);
+
     const endTimeMs = getCurrentTimestamp();
     const startTimeMs = callStartedAt || endTimeMs;
     const durationSecs = Math.max(1, Math.round((endTimeMs - startTimeMs) / 1000));
-    const batch = roleBatches.find((item) => item.id === activeBatchId) || currentLiveBatch;
-    if (!batch) {
-      setJitsiJoined(false);
-      setCallStartedAt(null);
+    const wasDirectCall = isDirectCall;
+    const batch = wasDirectCall ? null : roleBatches.find((item) => item.id === activeBatchId) || currentLiveBatch;
+
+    setJitsiJoined(false);
+    setIsDirectCall(false);
+    setJaasConfig(null);
+    setCallStartedAt(null);
+    setCallSessionDate('');
+    setCallElapsedSeconds(0);
+
+    if (!wasDirectCall && !batch) {
+      triggerToast('Classroom ended, but its class assignment could not be found; no session log was saved.');
+      return;
+    }
+    if (!supabase || !session?.user?.id) {
+      triggerToast('Call ended, but no session log was saved because the authenticated database connection is unavailable.');
       return;
     }
 
+    const endDate = new Date(endTimeMs);
+    const databaseDate = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
     const newLog = {
-      id: `call-${endTimeMs}`,
-      userId: session?.user?.id || null,
+      userId: session.user.id,
       participantName: currentUserName,
       participantRole: currentRole,
-      batchId: batch.id,
-      batchName: batch.name,
-      roomCode: batch.roomCode || '',
+      batchId: batch?.id || null,
+      batchName: batch?.name || 'Direct JaaS Test',
+      roomCode: wasDirectCall ? directRoomCode : batch.roomCode || '',
       sessionDate: new Date(endTimeMs).toLocaleDateString('en-GB', {
         day: '2-digit',
         month: 'short',
@@ -1161,62 +1370,126 @@ export default function App() {
       durationSeconds: durationSecs
     };
 
-    setJitsiJoined(false);
-    setCallStartedAt(null);
-    setCallElapsedSeconds(0);
-
-    if (supabase && session) {
-      const { error } = await supabase.from('class_sessions').insert({
+    let saveResult;
+    try {
+      saveResult = await supabase
+        .from('class_sessions')
+        .insert({
           user_id: session.user.id,
           participant_name: newLog.participantName,
           participant_role: currentRole,
           batch_id: newLog.batchId,
           batch_name: newLog.batchName,
           room_code: newLog.roomCode,
-          session_date: newLog.sessionDate,
+          session_date: wasDirectCall ? databaseDate : newLog.sessionDate,
           started_at: newLog.startedAt,
           ended_at: newLog.endedAt,
           duration_seconds: durationSecs
-        });
-      if (error) {
-        triggerToast(`Unable to save classroom session: ${error.message}`);
-      } else {
-        setCallLogs((prev) => [newLog, ...prev]);
+        })
+        .select('id')
+        .single();
+    } catch (error) {
+      triggerToast(`Call ended, but its session log could not be saved: ${error instanceof Error ? error.message : 'Unexpected database error.'}`);
+      return;
+    }
+    const { data: savedSession, error } = saveResult;
+    if (error) {
+      triggerToast(`Call ended, but its session log could not be saved: ${error.message}`);
+      return;
+    }
+
+    setCallLogs((prev) => [{ ...newLog, id: savedSession.id }, ...prev]);
+    if (!wasDirectCall && ['admin', 'staff'].includes(currentRole) && autoAttendanceStudentIdsRef.current.size > 0) {
+      let attendanceLinkResult;
+      try {
+        attendanceLinkResult = await supabase
+          .from('attendance')
+          .update({ class_session_id: savedSession.id })
+          .eq('batch_id', batch.id)
+          .eq('session_date', callSessionDate)
+          .in('student_id', Array.from(autoAttendanceStudentIdsRef.current));
+      } catch (error) {
+        triggerToast(
+          `Class session was saved, but attendee records could not be linked: ${
+            error instanceof Error ? error.message : 'Unexpected database error.'
+          }`
+        );
+        autoAttendanceStudentIdsRef.current = new Set();
+        return;
       }
+      if (attendanceLinkResult.error) {
+        triggerToast(`Class session was saved, but attendee records could not be linked: ${attendanceLinkResult.error.message}`);
+        autoAttendanceStudentIdsRef.current = new Set();
+        return;
+      }
+      autoAttendanceStudentIdsRef.current = new Set();
+    }
+
+    if (wasDirectCall && ['admin', 'staff'].includes(currentRole)) {
+      setDirectAttendanceSessionId(savedSession.id);
+      setDirectAttendanceDate(databaseDate);
+      setDirectAttendanceStatuses({});
+      setShowDirectAttendance(true);
+      setDirectRoomCode('');
+      triggerToast('Direct JaaS call logged. Mark attendance for assigned students below.');
+      return;
     }
 
     triggerToast(`Video session ended • Logged duration: ${formatDuration(durationSecs)}`);
   };
 
   // Handlers
-  const handleJoinClassroom = (batchId) => {
-    const batch = roleBatches.find((item) => item.id === batchId);
-    if (!batch) {
-      triggerToast('This class is not assigned to your account.');
+  const saveDirectCallAttendance = async () => {
+    if (!supabase || !session?.user?.id || !directAttendanceSessionId || !directAttendanceDate) {
+      triggerToast('The direct call session is unavailable; attendance was not saved.');
       return;
     }
-    if (!batch.roomCode) {
-      triggerToast('This class does not have a video room configured yet.');
-      return;
-    }
-    startVideoCallSession(batchId);
-    setActiveTab('classroom');
-    triggerToast(`Joined Live Video Classroom: ${batch.name}`);
-  };
 
-  const handleSendChat = (e) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: getCurrentTimestamp(),
-        sender: currentUserName,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        text: chatInput.trim()
-      }
-    ]);
-    setChatInput('');
+    const records = roleStudents
+      .filter((student) => {
+        const status = directAttendanceStatuses[student.id];
+        return (
+          ['Present', 'Absent'].includes(status) &&
+          student.batchId &&
+          roleBatches.some((batch) => batch.id === student.batchId)
+        );
+      })
+      .map((student) => ({
+        student_id: student.id,
+        batch_id: student.batchId,
+        session_date: directAttendanceDate,
+        status: directAttendanceStatuses[student.id],
+        marked_by: session.user.id,
+        class_session_id: directAttendanceSessionId
+      }));
+
+    if (records.length === 0) {
+      triggerToast('Select Present or Absent for at least one assigned student.');
+      return;
+    }
+
+    let attendanceResult;
+    try {
+      attendanceResult = await supabase
+        .from('attendance')
+        .upsert(records, { onConflict: 'student_id,batch_id,session_date' });
+    } catch (error) {
+      triggerToast(`Unable to save direct-call attendance: ${error instanceof Error ? error.message : 'Unexpected database error.'}`);
+      return;
+    }
+    const { error } = attendanceResult;
+    if (error) {
+      triggerToast(`Unable to save direct-call attendance: ${error.message}`);
+      return;
+    }
+
+    setTodayAttendance((previous) => ({
+      ...previous,
+      ...Object.fromEntries(records.map((record) => [record.student_id, record.status]))
+    }));
+    setShowDirectAttendance(false);
+    setDirectAttendanceSessionId(null);
+    triggerToast(`Attendance saved for ${records.length} student${records.length === 1 ? '' : 's'}.`);
   };
 
   const handleMarkAttendance = async (studentId, status, targetBatchId = attendanceBatchId) => {
@@ -1418,6 +1691,9 @@ export default function App() {
   const liveBatchStudents = currentLiveBatch
     ? roleStudents.filter((student) => student.batchId === currentLiveBatch.id)
     : [];
+  const directAttendanceStudents = roleStudents.filter(
+    (student) => student.batchId && roleBatches.some((batch) => batch.id === student.batchId)
+  );
   const currentDateLabel = new Intl.DateTimeFormat(undefined, {
     weekday: 'long',
     day: 'numeric',
@@ -1620,15 +1896,6 @@ export default function App() {
                 Sync
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => currentLiveBatch && handleJoinClassroom(currentLiveBatch.id)}
-              disabled={!currentLiveBatch}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold shadow-sm transition cursor-pointer"
-            >
-              <Video className="w-4 h-4" />
-              {currentRole === 'student' ? 'Join My Live Class' : 'Enter Live Classroom'}
-            </button>
             {currentRole === 'admin' && (
               <button
                 type="button"
@@ -1815,7 +2082,7 @@ export default function App() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    {currentRole === 'student' ? 'My Class Schedule & Live Room' : 'Live & Upcoming Online Batches'}
+                    {currentRole === 'student' ? 'My Class Schedule' : 'Live & Upcoming Online Batches'}
                   </h3>
                   <p className="text-xs text-slate-500">Your role-specific classes and upcoming sessions.</p>
                 </div>
@@ -1872,22 +2139,9 @@ export default function App() {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleJoinClassroom(batch.id)}
-                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shrink-0 transition cursor-pointer"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        Join Classroom
-                      </button>
                     </div>
                   );
                 })}
-                {roleBatches.length === 0 && (
-                  <p className="py-6 text-center text-sm text-slate-500">
-                    No classes are assigned to your account yet.
-                  </p>
-                )}
               </div>
             </div>
 
@@ -1947,7 +2201,7 @@ export default function App() {
                   <p className="text-xs text-slate-500">
                     {currentRole === 'admin'
                       ? 'Shows every live video call attended by all staff trainers and students'
-                      : 'Automatically recorded whenever you join and leave a Jitsi live video room'}
+                      : 'Session logs save when a call ends; assigned students are marked Present when their authenticated JaaS identity joins the batch room'}
                   </p>
                 </div>
 
@@ -1995,7 +2249,7 @@ export default function App() {
                           colSpan={currentRole === 'admin' ? 6 : 4}
                           className="py-6 px-4 text-center text-slate-500"
                         >
-                          No video calls recorded yet. Click <strong>Enter Live Classroom</strong> to start a session.
+                          No video calls recorded yet. Open Live Video Classroom and select Join Room to start a session.
                         </td>
                       </tr>
                     ) : (
@@ -2044,109 +2298,192 @@ export default function App() {
         )}
 
         {/* ===================================================================== */}
-        {/* TAB 2: INTEGRATED JITSI VIDEO CLASSROOM + SOROBAN + ANZAN            */}
+        {/* TAB 2: JAAS VIDEO CLASSROOM + SOROBAN + ANZAN                        */}
         {/* ===================================================================== */}
         {visibleTab === 'classroom' && (
           <div className="space-y-5">
-            <div className="bg-slate-900 text-white rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 border border-slate-800">
+            <div className="bg-slate-900 text-white rounded-2xl p-4 flex flex-wrap items-center gap-4 border border-slate-800">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold">
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
                   {jitsiJoined ? 'LIVE CLASSROOM' : 'CLASSROOM'}
                 </span>
-                <select
-                  value={activeBatchId}
-                  onChange={(e) => setActiveBatchId(e.target.value)}
-                  disabled={roleBatches.length === 0}
-                  className="bg-slate-800 border border-slate-700 text-sm font-bold text-white rounded-lg px-3 py-1 outline-none"
-                >
-                  {roleBatches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.time})
-                    </option>
-                  ))}
-                </select>
-                <span className="text-xs font-mono text-slate-400">
-                  Room: {currentLiveBatch?.roomCode || 'Not configured'}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {currentRole !== 'student' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setMicOn(!micOn)}
-                      className={`p-2 rounded-xl border transition cursor-pointer ${
-                        micOn ? 'bg-slate-800 border-slate-700 text-white' : 'bg-rose-600 border-rose-500 text-white'
-                      }`}
-                      title="Toggle Mic Status"
-                    >
-                      {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCamOn(!camOn)}
-                      className={`p-2 rounded-xl border transition cursor-pointer ${
-                        camOn ? 'bg-slate-800 border-slate-700 text-white' : 'bg-rose-600 border-rose-500 text-white'
-                      }`}
-                      title="Toggle Camera Status"
-                    >
-                      {camOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScreenSharing(!screenSharing);
-                        triggerToast(!screenSharing ? 'Highlighting Digital Soroban board' : 'Cleared board highlight');
-                      }}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer ${
-                        screenSharing
-                          ? 'bg-emerald-600 border-emerald-500 text-white'
-                          : 'bg-slate-800 border-slate-700 text-slate-200'
-                      }`}
-                    >
-                      <MonitorUp className="w-4 h-4" />
-                      <span>{screenSharing ? 'Board Highlighted' : 'Highlight Board'}</span>
-                    </button>
-                  </>
-                )}
-                {jitsiJoined && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await finishAndLogVideoCall();
-                      setActiveTab('overview');
-                    }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer"
+                {roleBatches.length > 1 ? (
+                  <select
+                    value={activeBatchId}
+                    onChange={(e) => setActiveBatchId(e.target.value)}
+                    disabled={jitsiJoined || callConnecting}
+                    className="bg-slate-800 border border-slate-700 text-sm font-bold text-white rounded-lg px-3 py-1 outline-none disabled:opacity-70"
+                    aria-label="Select assigned classroom"
                   >
-                    <PhoneOff className="w-4 h-4" />
-                    <span>{currentRole === 'student' ? 'Leave Classroom' : 'End Class'}</span>
-                  </button>
-                )}
+                    {roleBatches.map((batch) => (
+                      <option key={batch.id} value={batch.id}>
+                        {batch.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : roleBatches.length > 0 ? (
+                  <span className="text-sm font-bold text-white">
+                    {currentLiveBatch?.name}
+                  </span>
+                ) : null}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-              <div className="xl:col-span-2 space-y-5">
-                {/* Real Embedded Jitsi Meet Room */}
-                {currentLiveBatch?.roomCode ? (
-                  <JitsiVideoRoom
-                    roomCode={currentLiveBatch.roomCode}
-                    displayName={currentUserName}
-                    isJoined={jitsiJoined}
-                    elapsedSeconds={callElapsedSeconds}
-                    onJoinToggle={() => startVideoCallSession(currentLiveBatch.id)}
-                    onEndClass={finishAndLogVideoCall}
-                  />
-                ) : (
-                  <div className="min-h-[260px] rounded-2xl border border-slate-200 bg-white flex items-center justify-center p-6 text-center">
-                    <p className="text-sm text-slate-600">
-                      {currentLiveBatch
-                        ? 'A video room has not been configured for this class.'
-                        : 'No classes are assigned to your account.'}
+            {showDirectAttendance && (
+              <section className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Manual attendance · Direct JaaS call</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      The call is logged without a batch. Attendance is linked to that session and each student's assigned batch for {directAttendanceDate}.
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDirectAttendance(false);
+                      setDirectAttendanceSessionId(null);
+                    }}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Skip
+                  </button>
+                </div>
+
+                {directAttendanceStudents.length === 0 ? (
+                  <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
+                    No students with an assigned batch are available in your roster. Add or assign students before recording attendance.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                    {directAttendanceStudents.map((student) => (
+                      <div key={student.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{student.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {roleBatches.find((batch) => batch.id === student.batchId)?.name || 'Assigned class'}
+                          </p>
+                        </div>
+                        <select
+                          value={directAttendanceStatuses[student.id] || ''}
+                          onChange={(event) =>
+                            setDirectAttendanceStatuses((previous) => ({
+                              ...previous,
+                              [student.id]: event.target.value
+                            }))
+                          }
+                          aria-label={`Attendance for ${student.name}`}
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          <option value="">Not marked</option>
+                          <option value="Present">Present</option>
+                          <option value="Absent">Absent</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={saveDirectCallAttendance}
+                    disabled={
+                      !directAttendanceStudents.some((student) =>
+                        ['Present', 'Absent'].includes(directAttendanceStatuses[student.id])
+                      )
+                    }
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Save attendance
+                  </button>
+                </div>
+              </section>
+            )}
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+              <div className="xl:col-span-2 space-y-5">
+                {isDirectCall ? (
+                  <JitsiVideoRoom
+                    appId={jaasConfig?.appId}
+                    jwt={jaasConfig?.token}
+                    roomCode={directRoomCode}
+                    displayName={currentUserName}
+                    isJoined={jitsiJoined}
+                    isConnecting={callConnecting}
+                    attemptId={callStartedAt}
+                    elapsedSeconds={callElapsedSeconds}
+                    onJoinToggle={() => startDirectVideoCall(directRoomCode)}
+                    onEndClass={finishAndLogVideoCall}
+                    endCallLabel="Leave Room"
+                    onParticipantJoined={handleJaasParticipantJoined}
+                  />
+                ) : (
+                  <>
+                    {currentLiveBatch?.roomCode ? (
+                      <JitsiVideoRoom
+                        appId={jaasConfig?.appId}
+                        jwt={jaasConfig?.token}
+                        roomCode={currentLiveBatch.roomCode}
+                        displayName={currentUserName}
+                        isJoined={jitsiJoined}
+                        isConnecting={callConnecting}
+                        attemptId={callStartedAt}
+                        elapsedSeconds={callElapsedSeconds}
+                        onJoinToggle={() => startVideoCallSession(currentLiveBatch.id)}
+                        onEndClass={finishAndLogVideoCall}
+                        endCallLabel={currentRole === 'student' ? 'Leave Room' : 'End Class'}
+                        onParticipantJoined={handleJaasParticipantJoined}
+                      />
+                    ) : currentLiveBatch ? (
+                      <div className="min-h-[260px] rounded-2xl border border-slate-200 bg-white flex items-center justify-center p-6 text-center">
+                        <p className="text-sm text-slate-600">
+                          A video room has not been configured for this class.
+                        </p>
+                      </div>
+                    ) : null}
+                    {['admin', 'staff', 'student'].includes(currentRole) && (
+                      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-900">Join a Room</h3>
+                          <p className="text-xs text-slate-500 mt-1">
+                            No class assignment is required. Enter the room name shared by the other participants, or generate a room and share its name. Calls are logged; direct calls do not automatically record attendance.
+                          </p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="text"
+                            value={directRoomDraft}
+                            onChange={(event) => setDirectRoomDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') void startDirectVideoCall(directRoomDraft);
+                            }}
+                            maxLength={64}
+                            placeholder="Room name (letters, numbers, - or _)"
+                            aria-label="Direct JaaS room name"
+                            className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void startDirectVideoCall(directRoomDraft)}
+                            disabled={!directRoomDraft.trim() || callConnecting || jitsiJoined}
+                            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                          >
+                            Join Room
+                          </button>
+                          <button
+                            type="button"
+                            onClick={generateDirectRoom}
+                            disabled={callConnecting || jitsiJoined}
+                            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                          >
+                            Generate Room
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Interactive Digital Soroban */}
@@ -2175,47 +2512,6 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col flex-1 min-h-[260px]">
-                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                    <h4 className="text-sm font-bold text-slate-900">Classroom Notes</h4>
-                    <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-                      Local only
-                    </span>
-                  </div>
-
-                  <div className="flex-1 p-3.5 space-y-2.5 overflow-y-auto max-h-[220px]">
-                    {chatMessages.map((msg) => (
-                      <div key={msg.id} className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-                        <div className="flex justify-between items-center mb-0.5">
-                          <span className="text-xs font-bold text-indigo-900">{msg.sender}</span>
-                          <span className="text-[10px] text-slate-400">{msg.time}</span>
-                        </div>
-                        <p className="text-xs text-slate-700">{msg.text}</p>
-                      </div>
-                    ))}
-                    {chatMessages.length === 0 && (
-                      <p className="py-6 text-center text-xs text-slate-500">
-                        No notes have been added during this session.
-                      </p>
-                    )}
-                  </div>
-
-                  <form onSubmit={handleSendChat} className="p-3 border-t border-slate-100 flex gap-2">
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Add a note for this session..."
-                      className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
-                    />
-                    <button
-                      type="submit"
-                      className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition cursor-pointer"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
-                  </form>
-                </div>
               </div>
             </div>
           </div>
@@ -2250,18 +2546,20 @@ export default function App() {
                   ))}
                 </select>
 
-                <select
-                  value={trainerFilter}
-                  onChange={(e) => setTrainerFilter(e.target.value)}
-                  className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
-                >
-                  <option value="All">All Trainers</option>
-                  {staff.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.name}
-                    </option>
-                  ))}
-                </select>
+                {currentRole === 'admin' && (
+                  <select
+                    value={trainerFilter}
+                    onChange={(e) => setTrainerFilter(e.target.value)}
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 outline-none"
+                  >
+                    <option value="All">All Trainers</option>
+                    {staff.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
                 {currentRole === 'admin' && (
                   <select
@@ -2288,7 +2586,6 @@ export default function App() {
                       <th className="py-3.5 px-4">Assigned Trainer</th>
                       <th className="py-3.5 px-4">Session Progress</th>
                       {currentRole === 'admin' && <th className="py-3.5 px-4">Fee Status</th>}
-                      <th className="py-3.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
@@ -2348,21 +2645,12 @@ export default function App() {
                               {stu.monthlyFee == null ? '' : ` (₹${Number(stu.monthlyFee).toLocaleString('en-IN')})`}
                             </span>
                           </td>}
-                          <td className="py-3.5 px-4 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleJoinClassroom(stu.batchId)}
-                              className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition cursor-pointer"
-                            >
-                              Join Batch
-                            </button>
-                          </td>
                         </tr>
                       );
                     })}
                     {filteredStudents.length === 0 && (
                       <tr>
-                        <td colSpan={currentRole === 'admin' ? 6 : 5} className="py-8 text-center text-sm text-slate-500">
+                        <td colSpan={currentRole === 'admin' ? 5 : 4} className="py-8 text-center text-sm text-slate-500">
                           No assigned students match these filters.
                         </td>
                       </tr>
@@ -2516,14 +2804,6 @@ export default function App() {
                 </span>
                 <h3 className="text-lg font-extrabold mt-0.5">Assigned classes and meeting details</h3>
               </div>
-              <button
-                type="button"
-                onClick={() => currentLiveBatch && handleJoinClassroom(currentLiveBatch.id)}
-                disabled={!currentLiveBatch}
-                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-slate-950 text-xs font-extrabold transition shrink-0 cursor-pointer"
-              >
-                Open Assigned Class
-              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2560,22 +2840,9 @@ export default function App() {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleJoinClassroom(batch.id)}
-                      className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-                    >
-                      <Video className="w-4 h-4" />
-                      Start Live Video & Digital Abacus
-                    </button>
                   </div>
                 );
               })}
-              {roleBatches.length === 0 && (
-                <p className="col-span-full py-8 text-center text-sm text-slate-500">
-                  No classes are assigned to your account yet.
-                </p>
-              )}
             </div>
           </div>
         )}
@@ -2746,7 +3013,7 @@ export default function App() {
                           colSpan={currentRole === 'admin' ? 6 : 4}
                           className="py-6 px-4 text-center text-slate-500"
                         >
-                          No video calls recorded yet. Click <strong>Enter Live Classroom</strong> to start a session.
+                          No video calls recorded yet. Open Live Video Classroom and select Join Room to start a session.
                         </td>
                       </tr>
                     ) : (
