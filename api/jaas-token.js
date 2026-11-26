@@ -118,6 +118,12 @@ export default async function handler(req, res) {
         email: userResult.user.email || '',
         moderator: role === 'admin' || role === 'staff'
       },
+      features: {
+        livestreaming: false,
+        recording: false,
+        transcription: false,
+        'outbound-call': false
+      },
       room: { regex: false }
     }
   };
