@@ -1389,6 +1389,11 @@ export default function App() {
     };
 
     let saveResult;
+    console.info('[class_sessions] Insert started', {
+      callType: wasDirectCall ? 'direct' : 'batch',
+      participantRole: currentRole,
+      durationSeconds: durationSecs
+    });
     try {
       saveResult = await supabase
         .from('class_sessions')
@@ -1407,15 +1412,18 @@ export default function App() {
         .select('id')
         .single();
     } catch (error) {
+      console.error('[class_sessions] Insert threw an exception', error);
       triggerToast(`Call ended, but its session log could not be saved: ${error instanceof Error ? error.message : 'Unexpected database error.'}`);
       return;
     }
     const { data: savedSession, error } = saveResult;
     if (error) {
+      console.error('[class_sessions] Insert failed', error);
       triggerToast(`Call ended, but its session log could not be saved: ${error.message}`);
       return;
     }
 
+    console.info('[class_sessions] Insert succeeded', { id: savedSession.id });
     setCallLogs((prev) => [{ ...newLog, id: savedSession.id }, ...prev]);
     if (!wasDirectCall && ['admin', 'staff'].includes(currentRole) && autoAttendanceStudentIdsRef.current.size > 0) {
       let attendanceLinkResult;
