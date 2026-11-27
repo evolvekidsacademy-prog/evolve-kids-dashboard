@@ -25,6 +25,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import AboutUsPage from './AboutUsPage';
 
 // Safely initialize Supabase inline (works both in Vite with .env vars and in single-file Preview)
 const getEnvVar = (key) => {
@@ -530,6 +531,7 @@ function JitsiVideoRoom({
 // --- AUTHENTICATION SCREEN (SUPABASE LOGIN / SIGN UP + DEMO MODE) ---
 function AuthGateScreen({ authError, authLoading, onSignIn, onSignUp }) {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
+  const [showAbout, setShowAbout] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -549,17 +551,42 @@ function AuthGateScreen({ authError, authLoading, onSignIn, onSignUp }) {
     }
   };
 
+  if (showAbout) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-4 sm:p-8">
+        <AboutUsPage
+          onBack={() => setShowAbout(false)}
+          onPrimaryAction={() => {
+            setMode('signup');
+            setLocalMsg('');
+            setShowAbout(false);
+          }}
+          primaryActionLabel="Create an account"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-slate-900 to-teal-950 flex items-center justify-center p-4 text-slate-900">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 via-teal-400 to-indigo-500 flex items-center justify-center font-black text-slate-950 text-xl shadow">
-            EK
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 via-teal-400 to-indigo-500 flex items-center justify-center font-black text-slate-950 text-xl shadow">
+              EK
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">EVOLVE KIDS</h1>
+              <p className="text-xs font-medium text-teal-700">Abacus Academy & Online Classroom Portal</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">EVOLVE KIDS</h1>
-            <p className="text-xs font-medium text-teal-700">Abacus Academy & Online Classroom Portal</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowAbout(true)}
+            className="shrink-0 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800 transition hover:bg-indigo-100"
+          >
+            About Us
+          </button>
         </div>
 
         <div className="flex rounded-xl bg-slate-100 p-1 mb-5">
@@ -1744,6 +1771,7 @@ export default function App() {
         roles: ['admin', 'staff', 'student']
       },
       { id: 'classroom', label: 'Live Video Classroom', icon: Video, roles: ['admin', 'staff', 'student'] },
+      { id: 'about', label: 'About Us', icon: Sparkles, roles: ['admin', 'staff', 'student'] },
       { id: 'students', label: 'Students & Levels', icon: Users, count: roleStudents.length, roles: ['admin', 'staff'] },
       { id: 'staff', label: 'Staff & Roles', icon: UserCheck, count: staff.length, roles: ['admin'] },
       { id: 'schedule', label: 'Class Timings', icon: Calendar, roles: ['admin', 'staff'] },
@@ -2385,6 +2413,13 @@ export default function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {visibleTab === 'about' && (
+          <AboutUsPage
+            onPrimaryAction={() => setActiveTab('classroom')}
+            primaryActionLabel="Explore the classroom"
+          />
         )}
 
         {/* ===================================================================== */}
