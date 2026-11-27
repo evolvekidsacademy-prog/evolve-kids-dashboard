@@ -24,10 +24,13 @@ Apply `migrations/20261126173500_class_session_log_privileges.sql` after that mi
    - `JAAS_API_KEY_ID`: only the key ID associated with the uploaded public key; the token service adds the App ID prefix.
    - `JAAS_PRIVATE_KEY`: the matching private RSA key, including its PEM header and footer. Newlines may be entered literally or as `\n`.
    - `SUPABASE_URL` and `SUPABASE_ANON_KEY`: the same project URL and public anon key used by the dashboard. These are used by the token function to verify the signed-in user and role.
+   - `SUPABASE_SERVICE_ROLE_KEY`: the Supabase service-role key used only by the protected staff-account API. Never expose it in a `VITE_` variable or client-side code.
    - Keep the existing `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` variables for the browser app.
 3. Apply all migrations above in timestamp order using the Supabase CLI or the Supabase SQL Editor. Deploying the frontend to Vercel does not apply database migrations.
 4. Redeploy after setting the environment variables. Admin, staff, and student accounts can join a shared JaaS room without a class assignment. Calls are logged; batch-based automated attendance only applies when using an assigned batch classroom.
 
-Never put `JAAS_PRIVATE_KEY` in a `VITE_` variable, client-side code, or a committed file. The `/api/jaas-token` function signs short-lived room-scoped tokens only after checking the caller's Supabase session and profile role.
+Never put `JAAS_PRIVATE_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in a `VITE_` variable, client-side code, or a committed file. The `/api/jaas-token` and `/api/admin-create-staff` functions use server-side secrets only after checking the caller's Supabase session and profile role.
+
+The admin dashboard's **Add Staff** action directly creates a confirmed staff sign-in account from the name, email, and initial password entered by the admin, then assigns the `staff` profile role. It does not send an invitation email. The admin should share the credentials securely.
 
 The plain Vite development server does not run Vercel API functions. For local end-to-end testing, configure the same environment variables and use `npx vercel dev`; otherwise test against the deployed Vercel app. See the [JaaS IFrame API events](https://jitsi.github.io/handbook/docs/dev-guide/dev-guide-iframe-events/) reference for the participant identity event used by automated attendance.

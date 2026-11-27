@@ -703,6 +703,9 @@ export default function App() {
   const [feeFilter, setFeeFilter] = useState('All');
 
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [staffCreateLoading, setStaffCreateLoading] = useState(false);
+  const [newStaff, setNewStaff] = useState({ fullName: '', email: '', password: '', confirmPassword: '' });
 
   // Attendance Tab State
   const [attendanceBatchId, setAttendanceBatchId] = useState('');
@@ -1681,6 +1684,56 @@ export default function App() {
     triggerToast(`${created.name} saved.`);
   };
 
+  const resetNewStaff = () => setNewStaff({ fullName: '', email: '', password: '', confirmPassword: '' });
+
+  const closeAddStaffModal = () => {
+    if (staffCreateLoading) return;
+    setShowAddStaffModal(false);
+    resetNewStaff();
+  };
+
+  const handleAddStaffSubmit = async (e) => {
+    e.preventDefault();
+    const fullName = newStaff.fullName.trim();
+    const email = newStaff.email.trim().toLowerCase();
+    const password = newStaff.password;
+    if (currentRole !== 'admin' || !supabase || !session?.access_token || !fullName || !email) {
+      triggerToast('Only an administrator can add a staff member.');
+      return;
+    }
+    if (password.length < 8 || password.length > 128) {
+      triggerToast('Staff password must be between 8 and 128 characters.');
+      return;
+    }
+    if (password !== newStaff.confirmPassword) {
+      triggerToast('The staff passwords do not match.');
+      return;
+    }
+
+    setStaffCreateLoading(true);
+    try {
+      const response = await fetch('/api/admin-create-staff', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ fullName, email, password })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Staff account creation failed (HTTP ${response.status}).`);
+
+      setShowAddStaffModal(false);
+      resetNewStaff();
+      await loadAcademyData(currentRole, profile, session.user.id);
+      triggerToast(`Staff account created for ${fullName}. Share the sign-in credentials securely.`);
+    } catch (error) {
+      triggerToast(`Unable to add staff: ${error instanceof Error ? error.message : 'Unexpected server error.'}`);
+    } finally {
+      setStaffCreateLoading(false);
+    }
+  };
+
   // Navigation filtered by Role
   const navItems = useMemo(() => {
     const all = [
@@ -1924,14 +1977,24 @@ export default function App() {
               </button>
             )}
             {currentRole === 'admin' && (
-              <button
-                type="button"
-                onClick={() => setShowAddStudentModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                Enroll Student
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowAddStaffModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold shadow-sm transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Staff
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddStudentModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Enroll Student
+                </button>
+              </>
             )}
           </div>
         </header>
@@ -3161,6 +3224,108 @@ export default function App() {
       {/* ===================================================================== */}
       {/* MODAL: ENROLL NEW STUDENT                                             */}
       {/* ===================================================================== */}
+      {showAddStaffModal && currentRole === 'admin' && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-staff-title"
+            className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 id="add-staff-title" className="text-lg font-extrabold text-slate-900">Add Staff Member</h3>
+                <p className="text-xs text-slate-500 mt-1">Create the staff sign-in account directly. No invitation email will be sent.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAddStaffModal}
+                disabled={staffCreateLoading}
+                aria-label="Close add staff form"
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddStaffSubmit} className="space-y-3.5">
+              <div>
+                <label htmlFor="staff-full-name" className="block text-xs font-bold text-slate-700 mb-1">Staff Full Name</label>
+                <input
+                  id="staff-full-name"
+                  type="text"
+                  autoComplete="name"
+                  required
+                  maxLength={120}
+                  value={newStaff.fullName}
+                  onChange={(event) => setNewStaff((previous) => ({ ...previous, fullName: event.target.value }))}
+                  className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="staff-email" className="block text-xs font-bold text-slate-700 mb-1">Staff Email</label>
+                <input
+                  id="staff-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  maxLength={254}
+                  value={newStaff.email}
+                  onChange={(event) => setNewStaff((previous) => ({ ...previous, email: event.target.value }))}
+                  className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="staff-password" className="block text-xs font-bold text-slate-700 mb-1">Initial Password</label>
+                <input
+                  id="staff-password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  maxLength={128}
+                  value={newStaff.password}
+                  onChange={(event) => setNewStaff((previous) => ({ ...previous, password: event.target.value }))}
+                  className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="staff-confirm-password" className="block text-xs font-bold text-slate-700 mb-1">Confirm Password</label>
+                <input
+                  id="staff-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  maxLength={128}
+                  value={newStaff.confirmPassword}
+                  onChange={(event) => setNewStaff((previous) => ({ ...previous, confirmPassword: event.target.value }))}
+                  className="w-full px-3.5 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                />
+              </div>
+              <p className="text-xs text-slate-500">Share the initial password with the staff member securely.</p>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeAddStaffModal}
+                  disabled={staffCreateLoading}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={staffCreateLoading}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-teal-700 hover:bg-teal-800 text-white shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {staffCreateLoading ? 'Creating account…' : 'Create Staff Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showAddStudentModal && currentRole === 'admin' && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
@@ -3235,7 +3400,6 @@ export default function App() {
                   <select
                     required
                     value={newStudent.trainerId}
-                    required
                     onChange={(e) => setNewStudent({ ...newStudent, trainerId: e.target.value, batchId: '' })}
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
                   >
